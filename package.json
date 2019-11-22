@@ -1,0 +1,24 @@
+{
+  "name": "guess_tgbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RiXiLe/TgGuessBot.git"
+  },
+  "keywords": [],
+  "author": "Yurii Hrphul",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RiXiLe/TgGuessBot/issues"
+  },
+  "homepage": "https://github.com/RiXiLe/TgGuessBot#readme",
+  "dependencies": {
+    "telegraf": "^3.33.3",
+    "uuid": "^3.3.3"
+  }
+}

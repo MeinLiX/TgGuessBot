@@ -20,10 +20,12 @@ bot.catch((err, ctx) => {    //////////////////////////////////////////ERROR
     console.log("\n Ooops :\n", err);
 
 });
+
 bot.use((ctx, next) => {      //MESSAGE LOG!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!LLLLOOOOGGGG
     let userID;
     if (ctx.message)
         userID = ctx.message.chat.id;
+
 
     if (ctx.message) {
         console.log(ctx.message);
@@ -31,19 +33,21 @@ bot.use((ctx, next) => {      //MESSAGE LOG!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         console.log(ctx.editedMessage);
         ctx.reply("Stop editing message!");
     } else if (ctx.update) {
-        console.log(ctx.update.callback_query);
+        console.log(ctx.update);
     }
     console.log("\n\t***\t\n")
-    if (!state_users[userID]) {
+    if (!state_users[userID] && ctx.message) {
         state_users[userID] = {
-            nickname: "Guest",
+            nickname: ctx.message.from.first_name,
             roomID: "",
             password: 0,
             st: 0,
         }
     }
+
     return next();
 });
+
 bot.on(['music', 'sticker'], (ctx) => ctx.reply(':3'));///////answer///music///stiker//////
 
 
@@ -51,7 +55,7 @@ bot.on(['music', 'sticker'], (ctx) => ctx.reply(':3'));///////answer///music///s
 
 
 let LobbyMap = new Map();
-let state_users =
+let state_users = //exampleS
 {
     nickname: "Guest",
     roomID: "",
@@ -76,36 +80,120 @@ class lobby {                                                                   
     adduser(userID, PASS = 0) {                                                 //adduser
         if (PASS != this.settings.password || this.users.some(x => x.id === userID) || this.users.length == 2) return 0;
         this.users.push({ id: userID, secret_num: "", current_num: "" });
+        return 1;
     };
     win(audit) {                                                                //win
         return (audit.SameNum == 4 && audit.SameColumnNum == 4) ? 1 : 0;
     }
-    play(msg) {                                                                 //PLAY
-        if (!isTRUEnum(msg))
-            return "Incorrect entry!\nTry again!";
-        else if (this.settings.computer) {
-            this.users[1].current_num = msg;
-            let audit = this.audit_num(this.users[1].current_num);
-            let ans = "Your num:" + msg + "\nSame:" + audit.SameNum + "\nWith same position:" + audit.SameColumnNum + "\n\n";
-            if (this.win(audit)) {
-                destroyLobby(this);
-                return ans + "Very good, you won!";
-            }
-            else {
-                return ans + "Try again!";
-            }
-        }
-    }
     start(ctx) {                                                                //START
-        console.log(this.users.length + "\n" + this.settings.computer);
         if (this.users.length == 2) {
             if (this.settings.computer) {
                 this.users[0].secret_NUM = GetRandomSecretNum();
                 state_users[this.users[1].id].st = 505;
                 ctx.reply("Try to guess the number!");
+            } else {
+                let userID = ctx.message.chat.id;
+                let msg = ctx.message.text;
+                let { ans, opp } = this.setsecretnum(userID, msg);
+
+
+
+                if (this.users[0].secret_num != "" && this.users[1].secret_num != "") {
+                    state_users[this.users[0].id].st = 606;
+                    state_users[this.users[1].id].st = 606;
+
+                    ctx.telegram.sendMessage(this.users[0].id, "Start game!\nGuess the enemy number!");
+                    ctx.telegram.sendMessage(this.users[1].id, "Start game!\nEnemy move!");
+                } else ctx.reply(ans);
+
             }
         }
     }
+
+    setsecretnum(ID, msg) {
+        if (!isTRUEnum(msg)) {
+            if (this.users[0].id == ID)
+                this.users[0].secret_num = "";
+            if (this.users[1].id == ID)
+                this.users[1].secret_num = "";
+            return {
+                ans: "Incorrect entry!\nTry again!",
+                opp: ""
+            };
+        }
+
+        if (this.users[0].id == ID)
+            this.users[0].secret_num = msg;
+
+        if (this.users[1].id == ID)
+            this.users[1].secret_num = msg
+
+
+        return { ans: "If you would like to change your number, please send it to me again\nYour secret number:" + msg + "\n\nWait enemy...", opp: "" };
+
+    }
+    play(msg, useID = null) {                                                                 //PLAY
+        if (!isTRUEnum(msg))
+            return { ans: "Incorrect entry!\nTry again!", opp: "" };
+        else if (this.settings.computer) {
+            state_users[this.users[1].id].id = 505;
+            this.users[1].current_num = msg;
+            let audit = this.audit_num(this.users[1].current_num);
+            let ans = "Your num:" + msg + "\nSame:" + audit.SameNum + "\nWith same position:" + audit.SameColumnNum + "\n\n";
+            if (this.win(audit)) {
+                destroyLobby(this);
+                return {
+                    ans: ans + "Very good, you won!",
+                    opp: ""
+                };
+            } else {
+                return {
+                    ans: ans + "Try again!",
+                    opp: ""
+                };
+            }
+        }
+
+
+        else if (this.users.length == 2 && this.users[0].secret_num != "" && this.users[1].secret_num != "") {
+            state_users[this.users[0].id].id = 606;
+            state_users[this.users[1].id].id = 606;
+            let audit;
+            if (this.users[0].current_num == "" && this.users[0].id == useID) {
+                this.users[0].current_num = msg;
+                audit = this.audit_num(this.users[0].current_num, this.users[1].secret_num);
+                this.users[1].current_num = "";
+            } else if (this.users[1].current_num == "" && this.users[1].id == useID) {
+                this.users[1].current_num = msg;
+                audit = this.audit_num(this.users[1].current_num, this.users[0].secret_num);
+                this.users[0].current_num = "";
+            } else return { ans: "Wait, enemy move!" }
+
+            let ans = "Your num:" + msg + "\nSame:" + audit.SameNum + "\nWith same position:" + audit.SameColumnNum + "\n\n";
+            if (this.win(audit)) {
+                destroyLobby(this);
+                return {
+                    ans: ans + "Very good, you won!",
+                    opp: "Your opponent guessed the number!"
+                };
+            } else {
+                return {
+                    ans: ans + "Try again!\nIf your opponent doesn't guess your number c:",
+                    opp: "The time has come!\nGuess the number."
+                };
+            }
+        }
+        else if (this.users.length == 2) {
+            return {
+                ans: "Wait..your opponent's move",
+                opp: ""
+            };
+        }
+
+
+    }
+
+
     audit_num(num, secretNUM = this.users[0].secret_NUM) {                      //audit_num
         let _num = isNum(num).toString();
         let _secretNUM = isNum(secretNUM).toString();
@@ -126,30 +214,42 @@ class lobby {                                                                   
 };                                                                               //END class lobby***
 
 function createLobbby(userID, PASS = 0, COMPUTER = false) {
+    console.log("createLobbby");
+    if (state_users[userID].st != 0) return undefined;
     let ID = uuidv4();
     let nlb = new lobby(ID, PASS, COMPUTER);
     LobbyMap.set(ID, nlb);
+    if (!COMPUTER) {
+        nlb.adduser(userID);
+        state_users[userID].st = 604;
+    }
     state_users[userID].roomID = ID;
     state_users[userID].password = PASS;
+    console.log("createLobbby" + nlb);
     return nlb;
 };
+
 function destroyLobby(myLobby) {
     if (myLobby.id) {
         if (myLobby.settings.computer) {
             state_users[myLobby.users[1].id].lobbyID = "";
             state_users[myLobby.users[1].id].password = 0;
             state_users[myLobby.users[1].id].st = 0;
+        } else {
+            for (i = 0; i < 2; i++) {
+                state_users[myLobby.users[i].id].lobbyID = "";
+                state_users[myLobby.users[i].id].password = 0;
+                state_users[myLobby.users[i].id].st = 0;
+            }
         }
         LobbyMap.delete(lobby.id);
     }
 }
 
 function GetLobby(lobbyID) {
-    return LobbyMap.get(lobbyID);
+    res = LobbyMap.get(lobbyID);
+    return res;
 }
-
-
-
 
 async function loading(ctx) {
     let msg = await ctx.reply("Loading.. 🔑🔑➖➖➖➖🔒");
@@ -162,6 +262,7 @@ async function loading(ctx) {
     sleep(600);
     await ctx.deleteMessage(msg.message_id);
 };
+
 function sleep(milliseconds) {
     var start = new Date().getTime();
     for (var i = 0; i < 1e7; i++) {
@@ -170,6 +271,8 @@ function sleep(milliseconds) {
         }
     }
 };
+
+/* ***           NUMBER FN                   *** */
 function GetRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 };
@@ -179,7 +282,9 @@ function GetRandomSecretNum() {
     let result = "";
 
     for (let i = 0; i < 4; ++i) {
-        let x = GetRandomInt(0, symbols.length - 1);
+        let x;
+        if (i == 0) x = GetRandomInt(1, symbols.length - 1);
+        else x = GetRandomInt(0, symbols.length - 1);
         result += symbols[x];
 
         symbols.splice(x, 1);
@@ -196,13 +301,47 @@ function isTRUEnum(num) {
 
 
 
+bot.on('inline_query', ctx => {
+    if (ctx.update.inline_query.query == "invite" && state_users[ctx.update.inline_query.from.id].st == 0) {
+        //state_users[ctx.update.inline_query.from.id].st = 604;
+        return ctx.answerInlineQuery([
+            {
+                type: "article",
+                id: ctx.update.inline_query.id,
+                title: "Create and invite to the lobby",
+                description: "Invite a friend to play against each other.",
+                input_message_content: {
+                    message_text: "Want to play a game with me?"
+                },
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "Accept the invitation",
+                                url: "https://t.me/Botanja_bot?start=" + createLobbby(ctx.update.inline_query.from.id).id
+                            }
+                        ]
+                    ]
+                }
+            }
+        ], {
+            cache_time: 0,
+            is_personal: true
+        });
+    }
+
+    ctx.answerInlineQuery();
+})
+
+
+
 bot.on('callback_query', async (ctx, next) => { /////////////////////// ���������
     let userID = ctx.from.id;
     if (state_users[userID].st == 0) {
         //await loading(ctx);
         let data = ctx.update.callback_query.data;
         if (data == "menu") {
-           await ctx.editMessageText(`${state_users[userID].nickname}, choose the button what you need..`, {
+            await ctx.editMessageText(`${state_users[userID].nickname}, choose the button what you need..`, {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -211,7 +350,7 @@ bot.on('callback_query', async (ctx, next) => { /////////////////////// ���
                                 callback_data: 'Join_to_random_lobby'
                             }
                         ],
-                        [
+                       /* [
                             {
                                 text: '❌Create lobby❌',
                                 callback_data: 'Create_lobby'
@@ -220,7 +359,7 @@ bot.on('callback_query', async (ctx, next) => { /////////////////////// ���
                                 text: '❌List lobby\'s❌',
                                 callback_data: 'List_lobbys'
                             }
-                        ],
+                        ],*/
                         [
                             {
                                 text: '✅Start Practic✅',
@@ -308,41 +447,22 @@ bot.on('callback_query', async (ctx, next) => { /////////////////////// ���
 });
 
 
-bot.start(async (ctx, next) => {
-    let userID = ctx.message.chat.id;
-    let msg = ctx.message.text;
-    if (state_users[userID].st == 5) {
 
-    } else if (state_users[userID].st == 0) {
-        ctx.reply(`Welcome, ${state_users[userID].nickname}.`, {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'menu', callback_data: 'menu' }]
-                ]
-            }
-        })
+bot.help(ctx => {
+    ////////////////////////////////////////////////////////HELP
+    id = ctx.message.chat.id;
+    msg = ctx.message.text;
+    if (msg.length > 5 && id != 319877134) {
+        ctx.telegram.sendMessage(319877134, msg.slice(5, msg.length) + "\n\nКористувач(id)\n" + "(" + id + ")");
+        ctx.reply("Дякуємо за звернення!\n\nВаше повідомлення виглядає так:\n" + msg.slice(5, msg.length));
+    } else if (id == 319877134 && msg.length > 15) {
+        ctx.telegram.sendMessage(msg.slice(6, 15), msg.slice(16, msg.length));
+        ctx.reply("Наданна вами відповідь:\n" + msg.slice(16, msg.length) + "\nКористувачеві(id):" + msg.slice(6, 15));
+    } else if (id == 319877134 && msg.length < 16) {
+        ctx.reply("HEY!");
+    } else {
+        ctx.reply('Якщо у вас виникли питання або побажання напишіть їх в такій формі(Лапками знехнуйте):\n\n/help "Запитання" ');
     }
-    return next();
-});
-
-bot.help((ctx, next) => {   //HELP
-
-    let userID = ctx.message.chat.id;
-    if (state_users[userID].st == 0) {
-        let msg = ctx.message.text;
-        if (msg.length > 5 && userID != 319877134) {
-            ctx.telegram.sendMessage(319877134, msg.slice(5, msg.length) + "\n\n����������(userID)\n" + ctx.message.chat.first_name + "(" + userID + ")");
-            ctx.reply("������ �� ���������!\n\n���� ����������� ������� ���:\n" + msg.slice(5, msg.length));
-        } else if (userID == 319877134 && msg.length > 15) {
-            ctx.telegram.sendMessage(msg.slice(6, 15), msg.slice(16, msg.length));
-            ctx.reply("������� ���� �������:\n" + msg.slice(16, msg.length) + "\n������������(userID):" + msg.slice(6, 15));
-        } else if (userID == 319877134 && msg.length < 16) {
-            ctx.reply("Hey Admin!");
-        } else {
-            ctx.reply("���� � ��� ������� ������� ��� ��������� �������� �� � ���� ����(������� ���������):\n\n/help \"���������\" ");
-        }
-    }
-    return next();
 });
 
 
@@ -354,9 +474,9 @@ bot.use((ctx, next) => {
             if (state_users[userID].st == 505)
                 ctx.reply(GetLobby(state_users[userID].roomID).users[0].secret_NUM);
         } else if (msg == "/surrender") {
-            if (state_users[userID].st == 505) {
+            if (state_users[userID].st != 0) {
                 let myLobby = GetLobby(state_users[userID].roomID);
-                ctx.reply("You surrendered. \nSecret number: " + myLobby.users[0].secret_NUM, {
+                ctx.reply("You surrendered. \nSecret number enemy: " + myLobby.users[0].secret_NUM, {
                     reply_markup: {
                         inline_keyboard: [
                             [{ text: 'Go to menu', callback_data: 'menu' }]
@@ -366,7 +486,12 @@ bot.use((ctx, next) => {
                 destroyLobby(myLobby);
             }
         }
-        else if (state_users[userID].st == 401) { //Change Name!
+        else if (state_users[userID].st == 604) {
+            ctx.reply("Wait, your enemy don't join to the lobby..");
+        } else if (state_users[userID].st == 605) {
+            let myLobby = GetLobby(state_users[userID].roomID);
+            myLobby.start(ctx);
+        } else if (state_users[userID].st == 401) { //Change Name!
             msg = msg.slice(0, msg.length);
             state_users[userID].nickname = msg;
             ctx.reply(`Now your nickname: ${state_users[userID].nickname}!\nGood Luck!`, {
@@ -378,9 +503,9 @@ bot.use((ctx, next) => {
             });
             state_users[userID].st = 0;
         }
-        if (state_users[userID].st == 505) { //Practic mode!
+        else if (state_users[userID].st == 505) { //Practic mode!
             let myLobby = GetLobby(state_users[userID].roomID);
-            let ans = myLobby.play(msg);
+            let { ans, opp } = myLobby.play(msg);
             if (ans.indexOf('won') == -1) ctx.reply(ans);
             else ctx.reply(ans, {
                 reply_markup: {
@@ -389,10 +514,88 @@ bot.use((ctx, next) => {
                     ]
                 }
             });
+        } else if (state_users[userID].st == 606) { //Practic mode!
+            let myLobby = GetLobby(state_users[userID].roomID);
+            let { ans, opp } = myLobby.play(msg, userID);
+            if (myLobby.users[0].id == userID) {
+                if (ans.indexOf('won') == -1) {
+                    ctx.reply(ans);
+
+                    if (opp != "")
+                        ctx.telegram.sendMessage(myLobby.users[1].id, opp)
+                }
+                else {
+                    ctx.reply(ans, {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: 'Go to menu', callback_data: 'menu' }]
+                            ]
+                        }
+                    });
+
+                    if (opp != "")
+                        ctx.telegram.sendMessage(myLobby.users[1].id, opp, {
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{ text: 'Go to menu', callback_data: 'menu' }]
+                                ]
+                            }
+                        })
+                }
+            } else {
+                if (ans.indexOf('won') == -1) {
+                    ctx.reply(ans);
+
+                    if (opp != "")
+                        ctx.telegram.sendMessage(myLobby.users[0].id, opp)
+                }
+                else {
+                    ctx.reply(ans, {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: 'Go to menu', callback_data: 'menu' }]
+                            ]
+                        }
+                    });
+
+                    if (opp != "")
+                        ctx.telegram.sendMessage(myLobby.users[0].id, opp)
+                }
+            }
         }
     }
     return next();
 });
+
+
+bot.start(async (ctx) => {
+    let userID = ctx.message.chat.id;
+    let msg = ctx.message.text;
+    if (msg.length > 36 && state_users[userID].st == 0) {
+        let myLobby = GetLobby(msg.slice(7, msg.length));
+        if (myLobby != undefined && myLobby.users.length < 2) {
+            if (myLobby.adduser(userID)) {
+                state_users[userID].roomID = myLobby.id;
+                state_users[myLobby.users[0].id].st = 605;
+                state_users[myLobby.users[1].id].st = 605;
+                ctx.telegram.sendMessage(myLobby.users[0].id, "Write your secret number.[1023-9876]");
+                ctx.telegram.sendMessage(myLobby.users[1].id, "Write your secret number.[1023-9876]");
+            } else {
+                ctx.reply("You already in the lobby");
+            }
+        } else ctx.reply((myLobby == undefined) ? "does not exist" : "Lobby is full.")
+
+    } else if (state_users[userID].st == 0) {
+        ctx.reply(`Welcome, ${state_users[userID].nickname}.`, {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'menu', callback_data: 'menu' }]
+                ]
+            }
+        })
+    }
+});
+
 bot.command("change_name", (ctx, next) => {
     let userID = ctx.message.chat.id;
     if (state_users[userID].st == 0) {
@@ -403,13 +606,9 @@ bot.command("change_name", (ctx, next) => {
 });
 bot.command("test", async (ctx, next) => {
     let userID = ctx.message.chat.id;
-    let msg = "/start " + uuidv4() + "13372";
-    if (state_users[userID].st == 0) {
-        await ctx.reply(msg + "\n" + msg.length);
-        await ctx.reply(msg.slice(7, 7 + 36))
-        await ctx.reply(msg.slice(7 + 36 + 1, msg.length))
-        await loading(ctx);
-    }
+    console.log(GetLobby(userID.roomID))
+    console.log(state_users);
+
     return next();
 });
 
@@ -418,12 +617,19 @@ bot.launch();
 /*
  *  ctx.telegram.sendMessage(ida, `Game STARTED `+ states[id].name );
  *
+ *
  *  state 0 default.
+ *
  *
  *  state 401 Change Name.
  *       \nEnter /Change_Name for change nickname.
  *
+ *
  *  state 505 Practic mode!
+ *
+ *
+ *  state 605 register(secret num) for online mode.
+ *  state 606 online mode.
  *
  *
  * */

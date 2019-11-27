@@ -12,7 +12,7 @@ bot.catch((err, ctx) => {    //////////////////////////////////////////ERROR
         ctx.reply("Error!Write /start");
         state_users[userID] = {
             nickname: this.nickname,
-            roomID: "",
+            lobbyID: "",
             password: 0,
             st: 0,
         }
@@ -39,7 +39,7 @@ bot.use((ctx, next) => {      //MESSAGE LOG!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if (!state_users[userID] && ctx.message) {
         state_users[userID] = {
             nickname: ctx.message.from.first_name,
-            roomID: "",
+            lobbyID: "",
             password: 0,
             st: 0,
         }
@@ -58,7 +58,7 @@ let LobbyMap = new Map();
 let state_users = //exampleS
 {
     nickname: "Guest",
-    roomID: "",
+    lobbyID: "",
     password: 0,
     st: 0,
 };
@@ -223,7 +223,7 @@ function createLobbby(userID, PASS = 0, COMPUTER = false) {
         nlb.adduser(userID);
         state_users[userID].st = 604;
     }
-    state_users[userID].roomID = ID;
+    state_users[userID].lobbyID = ID;
     state_users[userID].password = PASS;
     console.log("createLobbby" + nlb);
     return nlb;
@@ -303,7 +303,6 @@ function isTRUEnum(num) {
 
 bot.on('inline_query', ctx => {
     if (ctx.update.inline_query.query == "invite" && state_users[ctx.update.inline_query.from.id].st == 0) {
-        //state_users[ctx.update.inline_query.from.id].st = 604;
         return ctx.answerInlineQuery([
             {
                 type: "article",
@@ -362,6 +361,12 @@ bot.on('callback_query', async (ctx, next) => { /////////////////////// ï¿½ï¿½ï¿
                         ],*/
                         [
                             {
+                                text: 'Invite',
+                                callback_data: 'Invite_to_lobby'
+                            }
+                        ],
+                        [
+                            {
                                 text: 'âœ…Start Practicâœ…',
                                 callback_data: 'Try_start_practic'
                             }
@@ -370,7 +375,20 @@ bot.on('callback_query', async (ctx, next) => { /////////////////////// ï¿½ï¿½ï¿
                 }
             });
         }
-
+        if(data=='Invite_to_lobby'){
+            ctx.reply("Want to play a game with me?",{
+                reply_markup:{
+                    inline_keyboard:[
+                        [
+                            {
+                                text:'Join to game',
+                                url:"https://t.me/Botanja_bot?start=" + createLobbby(userID).id
+                            }
+                        ]
+                    ]
+                }
+            });
+        }
 
         if (data == 'Join_to_random_lobby') {
             await ctx.editMessageText(`Not release...`, {
@@ -472,10 +490,10 @@ bot.use((ctx, next) => {
         let msg = ctx.message.text;
         if (msg == "/cheat") {
             if (state_users[userID].st == 505)
-                ctx.reply(GetLobby(state_users[userID].roomID).users[0].secret_NUM);
+                ctx.reply(GetLobby(state_users[userID].lobbyID).users[0].secret_NUM);
         } else if (msg == "/surrender") {
             if (state_users[userID].st != 0) {
-                let myLobby = GetLobby(state_users[userID].roomID);
+                let myLobby = GetLobby(state_users[userID].lobbyID);
                 ctx.reply("You surrendered. \nSecret number enemy: " + myLobby.users[0].secret_NUM, {
                     reply_markup: {
                         inline_keyboard: [
@@ -489,7 +507,7 @@ bot.use((ctx, next) => {
         else if (state_users[userID].st == 604) {
             ctx.reply("Wait, your enemy don't join to the lobby..");
         } else if (state_users[userID].st == 605) {
-            let myLobby = GetLobby(state_users[userID].roomID);
+            let myLobby = GetLobby(state_users[userID].lobbyID);
             myLobby.start(ctx);
         } else if (state_users[userID].st == 401) { //Change Name!
             msg = msg.slice(0, msg.length);
@@ -504,7 +522,7 @@ bot.use((ctx, next) => {
             state_users[userID].st = 0;
         }
         else if (state_users[userID].st == 505) { //Practic mode!
-            let myLobby = GetLobby(state_users[userID].roomID);
+            let myLobby = GetLobby(state_users[userID].lobbyID);
             let { ans, opp } = myLobby.play(msg);
             if (ans.indexOf('won') == -1) ctx.reply(ans);
             else ctx.reply(ans, {
@@ -515,7 +533,7 @@ bot.use((ctx, next) => {
                 }
             });
         } else if (state_users[userID].st == 606) { //Practic mode!
-            let myLobby = GetLobby(state_users[userID].roomID);
+            let myLobby = GetLobby(state_users[userID].lobbyID);
             let { ans, opp } = myLobby.play(msg, userID);
             if (myLobby.users[0].id == userID) {
                 if (ans.indexOf('won') == -1) {
@@ -575,7 +593,7 @@ bot.start(async (ctx) => {
         let myLobby = GetLobby(msg.slice(7, msg.length));
         if (myLobby != undefined && myLobby.users.length < 2) {
             if (myLobby.adduser(userID)) {
-                state_users[userID].roomID = myLobby.id;
+                state_users[userID].lobbyID = myLobby.id;
                 state_users[myLobby.users[0].id].st = 605;
                 state_users[myLobby.users[1].id].st = 605;
                 ctx.telegram.sendMessage(myLobby.users[0].id, "Write your secret number.[1023-9876]");
@@ -605,8 +623,6 @@ bot.command("change_name", (ctx, next) => {
     return next();
 });
 bot.command("test", async (ctx, next) => {
-    let userID = ctx.message.chat.id;
-    console.log(GetLobby(userID.roomID))
     console.log(state_users);
 
     return next();

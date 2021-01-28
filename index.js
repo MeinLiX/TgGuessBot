@@ -1,6 +1,6 @@
 //'use strict';
 const Telegraf = require('telegraf');
-const bot = new Telegraf("769141946:AAEIhwSEUdDn3mSWPqSqXL8eIBuOFlmRzvo");
+const bot = new Telegraf("BOT TOKEN :)");
 const uuidv4 = require('uuid/v4');
 
 

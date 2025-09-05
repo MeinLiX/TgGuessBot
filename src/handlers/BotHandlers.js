@@ -610,15 +610,21 @@ async handleWebAppSetSecret(ctx, userId, data) {
       const user = this.gameService.userService.getUser(userId);
       const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
       
-      const players = lobby.players.filter(p => p.id !== 0);
-      for (let i = 0; i < players.length; i++) {
-        const player = players[i];
-        const isFirstPlayer = i === 0;
+      if (lobby && lobby.gameStarted) {
+        const turnInfo = lobby.getCurrentTurnInfo();
+        const players = lobby.players.filter(p => p.id !== 0);
         
-        await ctx.telegram.sendMessage(
-          player.id, 
-          isFirstPlayer ? '🎮 Гра почалася! Ваш хід - вгадуйте число в грі!' : '🎮 Гра почалася! Хід опонента.'
-        );
+        for (let i = 0; i < players.length; i++) {
+          const player = players[i];
+          const isCurrentPlayer = player.id === turnInfo.currentPlayerId;
+          
+          await ctx.telegram.sendMessage(
+            player.id, 
+            isCurrentPlayer ? 
+              '🎮 Гра почалася! Ваш хід - вгадуйте число в грі!' : 
+              '🎮 Гра почалася! Хід опонента.'
+          );
+        }
       }
     }
   } else {
@@ -627,6 +633,23 @@ async handleWebAppSetSecret(ctx, userId, data) {
 }
 
 async handleWebAppMakeGuess(ctx, userId, data) {
+  const user = this.gameService.userService.getUser(userId);
+  if (!user || !user.isInLobby()) {
+    await ctx.reply('❌ Ви не в грі');
+    return;
+  }
+
+  const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
+  if (!lobby) {
+    await ctx.reply('❌ Гру не знайдено');
+    return;
+  }
+
+  if (!lobby.settings.isComputer && !lobby.isPlayerTurn(userId)) {
+    await ctx.reply('❌ Зараз не ваш хід!');
+    return;
+  }
+
   const result = this.gameService.processGuess(userId, data.guess);
   
   if (result.success) {
@@ -638,17 +661,13 @@ async handleWebAppMakeGuess(ctx, userId, data) {
         this.gameService.endGame(user.lobbyId);
       }
     } else {
-      const user = this.gameService.userService.getUser(userId);
-      if (user && user.lobbyId) {
-        const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
-        if (lobby && !lobby.settings.isComputer) {
-          const opponent = lobby.getOpponent(userId);
-          if (opponent && result.opponent) {
-            try {
-              await ctx.telegram.sendMessage(opponent.id, `🎮 ${result.opponent}`);
-            } catch (error) {
-              logger.error(`Failed to notify opponent ${opponent.id}:`, error);
-            }
+      if (!lobby.settings.isComputer && result.opponent) {
+        const opponent = lobby.getOpponent(userId);
+        if (opponent && opponent.id !== 0) {
+          try {
+            await ctx.telegram.sendMessage(opponent.id, `🎮 ${result.opponent}`);
+          } catch (error) {
+            logger.error(`Failed to notify opponent ${opponent.id}:`, error);
           }
         }
       }
@@ -669,7 +688,7 @@ async handleWebAppSurrender(ctx, userId, data) {
       const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
       if (lobby && !lobby.settings.isComputer) {
         const opponent = lobby.getOpponent(userId);
-        if (opponent) {
+        if (opponent && opponent.id !== 0) {
           try {
             await ctx.telegram.sendMessage(opponent.id, '🏆 Ваш опонент здався! Ви перемогли!');
           } catch (error) {
@@ -677,7 +696,11 @@ async handleWebAppSurrender(ctx, userId, data) {
           }
         }
       }
+      
+      this.gameService.endGame(user.lobbyId);
     }
+  } else {
+    await ctx.reply(`❌ ${result.message}`);
   }
 }
 

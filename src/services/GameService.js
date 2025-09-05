@@ -145,23 +145,30 @@ class GameService {
    * Set secret number for player
    */
   setSecretNumber(userId, secretNumber) {
-    try {
-      const user = this.userService.getUser(userId);
-      if (!user || !user.isInLobby()) {
-        return { success: false, message: 'User not in lobby' };
-      }
+  try {
+    const user = this.userService.getUser(userId);
+    if (!user || !user.isInLobby()) {
+      return { success: false, message: 'User not in lobby' };
+    }
 
-      const lobby = this.lobbyService.getLobby(user.lobbyId);
-      if (!lobby) {
-        return { success: false, message: 'Lobby not found' };
-      }
+    const lobby = this.lobbyService.getLobby(user.lobbyId);
+    if (!lobby) {
+      return { success: false, message: 'Lobby not found' };
+    }
 
-      const result = lobby.setPlayerSecretNumber(userId, secretNumber);
-      
-      if (result.success && lobby.allPlayersReady() && lobby.isFull()) {
+    const result = lobby.setPlayerSecretNumber(userId, secretNumber);
+    
+    if (result.success) {
+      if (lobby.allPlayersReady() && lobby.isFull()) {
+        if (!lobby.gameStarted) {
+          lobby.startGame();
+        }
+        
         for (const player of lobby.players) {
           if (player.id !== 0) {
-            this.userService.updateUserState(player.id, USER_STATES.ONLINE_GAME);
+            this.userService.updateUserState(player.id, 
+              lobby.settings.isComputer ? USER_STATES.PRACTICE_MODE : USER_STATES.ONLINE_GAME
+            );
           }
         }
         
@@ -171,37 +178,44 @@ class GameService {
           gameReady: true
         };
       }
-
-      return result;
-    } catch (error) {
-      logger.error('Error setting secret number:', error);
-      return { success: false, message: 'Failed to set secret number' };
     }
+
+    return result;
+  } catch (error) {
+    logger.error('Error setting secret number:', error);
+    return { success: false, message: 'Failed to set secret number' };
   }
+}
 
   /**
    * Process player guess
    */
   processGuess(userId, guess) {
-    try {
-      const user = this.userService.getUser(userId);
-      if (!user || !user.isInLobby()) {
-        return { success: false, message: 'User not in game' };
-      }
-
-      const lobby = this.lobbyService.getLobby(user.lobbyId);
-      if (!lobby) {
-        return { success: false, message: 'Game not found' };
-      }
-
-      const result = lobby.processGuess(userId, guess);
-
-      return result;
-    } catch (error) {
-      logger.error('Error processing guess:', error);
-      return { success: false, message: 'Failed to process guess' };
+  try {
+    const user = this.userService.getUser(userId);
+    if (!user || !user.isInLobby()) {
+      return { success: false, message: 'User not in game' };
     }
+
+    const lobby = this.lobbyService.getLobby(user.lobbyId);
+    if (!lobby) {
+      return { success: false, message: 'Game not found' };
+    }
+
+    if (!lobby.gameStarted) {
+      return { success: false, message: 'Game not started yet' };
+    }
+
+    const result = lobby.processGuess(userId, guess);
+
+    logger.info(`Guess processed for user ${userId}: ${guess}, result: ${JSON.stringify(result)}`);
+
+    return result;
+  } catch (error) {
+    logger.error('Error processing guess:', error);
+    return { success: false, message: 'Failed to process guess' };
   }
+}
 
   /**
    * Surrender game

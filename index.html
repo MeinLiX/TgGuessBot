@@ -86,6 +86,12 @@
             transform: translateY(0);
         }
 
+        .menu-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .menu-button.secondary {
             background: var(--tg-theme-secondary-bg-color, #f0f0f0);
             color: var(--tg-theme-text-color, #000000);
@@ -94,6 +100,27 @@
         .menu-button.danger {
             background: #ff3b30;
             color: white;
+        }
+
+        .turn-indicator {
+            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .turn-indicator.my-turn {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+
+        .turn-indicator.opponent-turn {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffc107;
         }
 
         .input-group {
@@ -123,6 +150,11 @@
 
         .number-input:focus {
             border-color: var(--tg-theme-button-color, #3390ec);
+        }
+
+        .number-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .number-input.error {
@@ -408,6 +440,10 @@
                 <p id="game-status">Ваш хід</p>
             </div>
 
+            <div id="turn-indicator" class="turn-indicator my-turn">
+                🎯 Ваш хід! Вгадуйте число опонента
+            </div>
+
             <div class="game-info">
                 <h3>🎯 Ваші спроби:</h3>
                 <div class="guess-history" id="guess-history">
@@ -459,22 +495,21 @@
     </div>
 
     <script>
-        // Ініціалізація Telegram WebApp
         let tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
 
-        // Стан гри
         let gameState = {
             currentScreen: 'main-menu',
             lobbyId: null,
             isMyTurn: false,
             guessHistory: [],
             gameMode: null,
-            secretNumber: null
+            secretNumber: null,
+            isGameStarted: false,
+            opponentConnected: false
         };
 
-        // Функції навігації
         function showScreen(screenId) {
             document.querySelectorAll('.game-screen').forEach(screen => {
                 screen.classList.remove('active');
@@ -505,41 +540,117 @@
                 isMyTurn: false,
                 guessHistory: [],
                 gameMode: null,
-                secretNumber: null
+                secretNumber: null,
+                isGameStarted: false,
+                opponentConnected: false
             };
             document.getElementById('guess-history').innerHTML = '';
+            updateTurnIndicator();
         }
 
-        // Функції інтеграції з Telegram Bot
+        function updateTurnIndicator() {
+            const indicator = document.getElementById('turn-indicator');
+            const guessInput = document.getElementById('guess-input');
+            const guessBtn = document.getElementById('guess-btn');
+            
+            if (!indicator) return;
+
+            if (gameState.gameMode === 'practice') {
+                indicator.className = 'turn-indicator my-turn';
+                indicator.textContent = '🤖 Тренування з ботом - завжди ваш хід!';
+                if (guessInput) guessInput.disabled = false;
+                if (guessBtn) guessBtn.disabled = false;
+            } else if (gameState.isMyTurn) {
+                indicator.className = 'turn-indicator my-turn';
+                indicator.textContent = '🎯 Ваш хід! Вгадуйте число опонента';
+                if (guessInput) guessInput.disabled = false;
+                if (guessBtn) guessBtn.disabled = false;
+            } else {
+                indicator.className = 'turn-indicator opponent-turn';
+                indicator.textContent = '⏳ Хід опонента... Очікуйте';
+                if (guessInput) guessInput.disabled = true;
+                if (guessBtn) guessBtn.disabled = true;
+            }
+        }
+
         function sendDataToBot(data) {
             if (tg.sendData) {
                 console.log('Sending to bot:', data);
                 tg.sendData(JSON.stringify(data));
             } else {
-                // Fallback для тестування без Telegram
                 console.log('Demo mode - would send to bot:', data);
-                showNotification('Demo режим: ' + JSON.stringify(data));
+                handleDemoResponse(data);
             }
         }
 
-        // Ігрові функції
+        function handleDemoResponse(data) {
+            setTimeout(() => {
+                switch(data.action) {
+                    case 'create_lobby':
+                        gameState.lobbyId = generateLobbyId();
+                        gameState.gameMode = 'online';
+                        document.getElementById('lobby-id').textContent = gameState.lobbyId;
+                        showScreen('create-lobby');
+                        document.getElementById('lobby-created').classList.remove('hidden');
+                        break;
+                        
+                    case 'join_lobby':
+                        gameState.lobbyId = data.lobbyId;
+                        gameState.gameMode = 'online';
+                        showScreen('set-secret');
+                        break;
+                        
+                    case 'start_practice':
+                        gameState.gameMode = 'practice';
+                        gameState.lobbyId = 'practice_' + Date.now();
+                        gameState.isMyTurn = true;
+                        gameState.isGameStarted = true;
+                        showScreen('game-play');
+                        document.getElementById('game-status').textContent = 'Тренування з ботом';
+                        updateTurnIndicator();
+                        break;
+                        
+                    case 'set_secret':
+                        gameState.secretNumber = data.secretNumber;
+                        if (gameState.gameMode === 'online') {
+                            setTimeout(() => {
+                                gameState.opponentConnected = true;
+                                gameState.isGameStarted = true;
+                                gameState.isMyTurn = Math.random() > 0.5;
+                                showScreen('game-play');
+                                updateTurnIndicator();
+                            }, 2000);
+                        }
+                        break;
+                        
+                    case 'make_guess':
+                        handleDemoGuess(data.guess);
+                        break;
+                }
+            }, 1000);
+        }
+
+        function handleDemoGuess(guess) {
+            const result = simulateGuessResult(guess);
+            addGuessToHistory(guess, result);
+            
+            document.getElementById('guess-input').value = '';
+            
+            if (result.win) {
+                setTimeout(() => showGameResult(true, gameState.guessHistory.length), 500);
+            } else {
+                if (gameState.gameMode === 'online') {
+                    gameState.isMyTurn = !gameState.isMyTurn;
+                    updateTurnIndicator();
+                }
+            }
+        }
+
         function createLobby() {
             showLoading();
-            
-            // Відправляємо дані боту
             sendDataToBot({
                 action: 'create_lobby'
             });
-            
-            // Симуляція для демо
-            setTimeout(() => {
-                gameState.lobbyId = generateLobbyId();
-                gameState.gameMode = 'online';
-                
-                document.getElementById('lobby-id').textContent = gameState.lobbyId;
-                showScreen('create-lobby');
-                document.getElementById('lobby-created').classList.remove('hidden');
-            }, 1000);
         }
 
         function joinLobby() {
@@ -550,36 +661,17 @@
             }
 
             showLoading();
-            
-            // Відправляємо дані боту
             sendDataToBot({
                 action: 'join_lobby',
                 lobbyId: code
             });
-            
-            // Симуляція для демо
-            setTimeout(() => {
-                gameState.lobbyId = code;
-                gameState.gameMode = 'online';
-                showScreen('set-secret');
-            }, 1000);
         }
 
         function startPractice() {
             showLoading();
-            
             sendDataToBot({
                 action: 'start_practice'
             });
-            
-            // Симуляція для демо
-            setTimeout(() => {
-                gameState.gameMode = 'practice';
-                gameState.lobbyId = 'practice_' + Date.now();
-                showScreen('game-play');
-                document.getElementById('game-status').textContent = 'Тренування з ботом';
-                gameState.isMyTurn = true;
-            }, 1000);
         }
 
         function setSecretNumber() {
@@ -593,18 +685,10 @@
             gameState.secretNumber = number;
             showLoading();
             
-            // Відправляємо дані боту
             sendDataToBot({
                 action: 'set_secret',
                 secretNumber: number
             });
-            
-            // Симуляція для демо
-            setTimeout(() => {
-                showScreen('game-play');
-                gameState.isMyTurn = true;
-                document.getElementById('game-status').textContent = 'Ваш хід!';
-            }, 1500);
         }
 
         function makeGuess() {
@@ -615,29 +699,15 @@
                 return;
             }
 
-            if (!gameState.isMyTurn) {
+            if (gameState.gameMode === 'online' && !gameState.isMyTurn) {
                 showError('Зараз не ваш хід!');
                 return;
             }
 
-            // Відправляємо дані боту
             sendDataToBot({
                 action: 'make_guess',
                 guess: guess
             });
-            
-            // Для демо - симулюємо результат
-            const result = simulateGuessResult(guess);
-            addGuessToHistory(guess, result);
-            
-            document.getElementById('guess-input').value = '';
-            
-            if (result.win) {
-                setTimeout(() => showGameResult(true, gameState.guessHistory.length), 500);
-            } else {
-                gameState.isMyTurn = true;
-                document.getElementById('game-status').textContent = 'Ваш хід!';
-            }
         }
 
         function surrenderGame() {
@@ -645,8 +715,6 @@
                 sendDataToBot({
                     action: 'surrender'
                 });
-                
-                // Симуляція для демо
                 showGameResult(false, gameState.guessHistory.length, true);
             }
         }
@@ -660,7 +728,6 @@
             }
         }
 
-        // Допоміжні функції
         function validateSecretNumber(number) {
             if (!number || number.length !== 4) return false;
             if (number[0] === '0') return false;
@@ -671,11 +738,9 @@
         }
 
         function simulateGuessResult(guess) {
-            // Симуляція результату вгадування
             const correctDigits = Math.floor(Math.random() * 4) + 1;
             const correctPositions = Math.floor(Math.random() * correctDigits);
-            
-            const isWin = Math.random() > 0.7; // 30% шанс виграшу для демо
+            const isWin = Math.random() > 0.8; 
             
             return {
                 win: isWin,
@@ -748,21 +813,17 @@
             }
         }
 
-        // Обробка введення тільки цифр
         document.addEventListener('input', function(e) {
             if (e.target.classList.contains('number-input')) {
                 if (e.target.id === 'lobby-code') {
-                    // Для коду лобі дозволяємо букви та цифри
                     e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
                 } else {
-                    // Для чисел тільки цифри
                     e.target.value = e.target.value.replace(/\D/g, '');
                 }
                 e.target.classList.remove('error');
             }
         });
 
-        // Обробка Enter для підтвердження
         document.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 const currentScreen = gameState.currentScreen;
@@ -775,15 +836,15 @@
                         setSecretNumber();
                         break;
                     case 'game-play':
-                        makeGuess();
+                        if (gameState.gameMode === 'practice' || gameState.isMyTurn) {
+                            makeGuess();
+                        }
                         break;
                 }
             }
         });
 
-        // Ініціалізація
         document.addEventListener('DOMContentLoaded', function() {
-            // Якщо є параметр start в URL, автоматично приєднуємося до лобі
             const urlParams = new URLSearchParams(window.location.search);
             const startParam = urlParams.get('start');
             
@@ -792,10 +853,11 @@
                 showJoinLobby();
             }
             
-            // Ініціалізуємо Telegram WebApp
             if (tg.initData) {
                 console.log('Telegram WebApp initialized:', tg.initDataUnsafe);
             }
+
+            updateTurnIndicator();
         });
     </script>
 </body>

@@ -1,24 +1,44 @@
 {
   "name": "guess_tgbot",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Telegram Number Guessing Game Bot",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/RiXiLe/TgGuessBot.git"
   },
-  "keywords": [],
-  "author": "Yurii Hrphul",
+  "keywords": [
+    "telegram",
+    "bot",
+    "game",
+    "number-guessing",
+    "nodejs"
+  ],
+  "author": "Yurii Hrohul",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/RiXiLe/TgGuessBot/issues"
   },
-  "homepage": "https://github.com/RiXiLe/TgGuessBot#readme",
+  "homepage": "https://github.com/RiXiLe/TgGuessBot",
   "dependencies": {
-    "telegraf": "^3.33.3",
-    "uuid": "^3.3.3"
+    "telegraf": "^4.16.3",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }

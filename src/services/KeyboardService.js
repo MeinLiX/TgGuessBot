@@ -25,7 +25,13 @@ class KeyboardService {
             text: KEYBOARD_LABELS.START_PRACTICE,
             callback_data: CALLBACK_DATA.TRY_START_PRACTICE
           }
-        ]
+        ],
+        [{
+          text: '🎮 Відкрити гру',
+          web_app: {
+            url: process.env.WEBAPP_URL
+          }
+        }]
       ]
     };
   }

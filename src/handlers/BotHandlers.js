@@ -506,6 +506,197 @@ async handlePracticeGuess(ctx, userId, guess) {
       }
     }, 60 * 60 * 1000); // 1 hour
   }
+
+  async handleWebAppData(ctx) {
+  try {
+    const webAppData = ctx.message.web_app_data;
+    if (!webAppData) return;
+
+    const data = JSON.parse(webAppData.data);
+    const userId = ctx.from.id;
+
+    logger.info(`WebApp action from user ${userId}:`, data);
+
+    switch (data.action) {
+      case 'create_lobby':
+        await this.handleWebAppCreateLobby(ctx, userId, data);
+        break;
+      case 'join_lobby':
+        await this.handleWebAppJoinLobby(ctx, userId, data);
+        break;
+      case 'start_practice':
+        await this.handleWebAppStartPractice(ctx, userId, data);
+        break;
+      case 'set_secret':
+        await this.handleWebAppSetSecret(ctx, userId, data);
+        break;
+      case 'make_guess':
+        await this.handleWebAppMakeGuess(ctx, userId, data);
+        break;
+      case 'surrender':
+        await this.handleWebAppSurrender(ctx, userId, data);
+        break;
+      case 'leave_lobby':
+        await this.handleWebAppLeaveLobby(ctx, userId, data);
+        break;
+      default:
+        logger.warn(`Unknown WebApp action: ${data.action}`);
+    }
+  } catch (error) {
+    logger.error('Error handling Web App data:', error);
+    await ctx.reply('❌ Помилка обробки даних з гри');
+  }
+}
+async handleWebAppCreateLobby(ctx, userId, data) {
+  const result = this.gameService.createOnlineLobby(userId);
+  
+  if (result.success) {
+    await ctx.reply(`🎯 Кімнату створено!\n\n📋 Код кімнати: \`${result.lobby.id}\`\n\nПередайте цей код другу для приєднання до гри.`, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: '📱 Відкрити гру',
+              web_app: {
+                url: process.env.WEBAPP_URL
+              }
+            }
+          ]
+        ]
+      }
+    });
+  } else {
+    await ctx.reply(`❌ ${result.message}`);
+  }
+}
+async handleWebAppJoinLobby(ctx, userId, data) {
+  const result = this.gameService.joinLobby(userId, data.lobbyId);
+  
+  if (result.success) {
+    await ctx.reply('✅ Ви приєднались до кімнати! Встановіть секретне число в грі.');
+    
+    const lobby = result.lobby;
+    const creator = lobby.players.find(p => p.id !== userId && p.id !== 0);
+    if (creator) {
+      try {
+        await ctx.telegram.sendMessage(creator.id, '👤 Гравець приєднався до вашої кімнати! Встановіть секретне число.');
+      } catch (error) {
+        logger.error(`Failed to notify lobby creator ${creator.id}:`, error);
+      }
+    }
+  } else {
+    await ctx.reply(`❌ ${result.message}`);
+  }
+}
+
+async handleWebAppStartPractice(ctx, userId, data) {
+  const result = this.gameService.createPracticeGame(userId);
+  
+  if (result.success) {
+    await ctx.reply('🤖 Тренування розпочато! Комп\'ютер вже загадав число. Вгадуйте в грі!');
+  } else {
+    await ctx.reply(`❌ ${result.message}`);
+  }
+}
+
+async handleWebAppSetSecret(ctx, userId, data) {
+  const result = this.gameService.setSecretNumber(userId, data.secretNumber);
+  
+  if (result.success) {
+    await ctx.reply(`🔒 Секретне число встановлено: ${data.secretNumber}`);
+    
+    if (result.gameReady) {
+      const user = this.gameService.userService.getUser(userId);
+      const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
+      
+      const players = lobby.players.filter(p => p.id !== 0);
+      for (let i = 0; i < players.length; i++) {
+        const player = players[i];
+        const isFirstPlayer = i === 0;
+        
+        await ctx.telegram.sendMessage(
+          player.id, 
+          isFirstPlayer ? '🎮 Гра почалася! Ваш хід - вгадуйте число в грі!' : '🎮 Гра почалася! Хід опонента.'
+        );
+      }
+    }
+  } else {
+    await ctx.reply(`❌ ${result.message}`);
+  }
+}
+
+async handleWebAppMakeGuess(ctx, userId, data) {
+  const result = this.gameService.processGuess(userId, data.guess);
+  
+  if (result.success) {
+    await ctx.reply(`🎯 Хід: ${data.guess}\n${result.message}`);
+    
+    if (result.gameEnded) {
+      const user = this.gameService.userService.getUser(userId);
+      if (user && user.lobbyId) {
+        this.gameService.endGame(user.lobbyId);
+      }
+    } else {
+      const user = this.gameService.userService.getUser(userId);
+      if (user && user.lobbyId) {
+        const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
+        if (lobby && !lobby.settings.isComputer) {
+          const opponent = lobby.getOpponent(userId);
+          if (opponent && result.opponent) {
+            try {
+              await ctx.telegram.sendMessage(opponent.id, `🎮 ${result.opponent}`);
+            } catch (error) {
+              logger.error(`Failed to notify opponent ${opponent.id}:`, error);
+            }
+          }
+        }
+      }
+    }
+  } else {
+    await ctx.reply(`❌ ${result.message}`);
+  }
+}
+
+async handleWebAppSurrender(ctx, userId, data) {
+  const result = this.gameService.surrenderGame(userId);
+  
+  if (result.success) {
+    await ctx.reply(`🏳️ ${result.message}`);
+    
+    const user = this.gameService.userService.getUser(userId);
+    if (user && user.lobbyId) {
+      const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
+      if (lobby && !lobby.settings.isComputer) {
+        const opponent = lobby.getOpponent(userId);
+        if (opponent) {
+          try {
+            await ctx.telegram.sendMessage(opponent.id, '🏆 Ваш опонент здався! Ви перемогли!');
+          } catch (error) {
+            logger.error(`Failed to notify opponent ${opponent.id}:`, error);
+          }
+        }
+      }
+    }
+  }
+}
+
+async handleWebAppLeaveLobby(ctx, userId, data) {
+  const result = this.gameService.leaveLobby(userId);
+  
+  if (result.success) {
+    await ctx.reply('🚪 Ви покинули кімнату.');
+    
+    if (result.opponentId) {
+      try {
+        await ctx.telegram.sendMessage(result.opponentId, '👋 Ваш опонент покинув кімнату.');
+      } catch (error) {
+        logger.error(`Failed to notify opponent ${result.opponentId}:`, error);
+      }
+    }
+  }
+}
+
 }
 
 module.exports = BotHandlers;

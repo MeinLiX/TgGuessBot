@@ -43,6 +43,8 @@ bot.on(['audio', 'document', 'photo', 'sticker', 'video', 'voice'], (ctx) => han
 
 bot.on('text', (ctx) => handlers.handleTextMessage(ctx));
 
+bot.on('web_app_data', (ctx) => handlers.handleWebAppData(ctx));
+
 handlers.setupCleanupJob();
 
 process.once('SIGINT', () => {

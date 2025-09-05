@@ -495,32 +495,32 @@
     </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
+        const tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
 
         let gameState = {
             currentScreen: 'main-menu',
-            lobbyId: null,
-            isMyTurn: false,
-            guessHistory: [],
             gameMode: null,
-            secretNumber: null,
-            isGameStarted: false,
-            opponentConnected: false
+            guessCount: 0
         };
 
         function showScreen(screenId) {
             document.querySelectorAll('.game-screen').forEach(screen => {
                 screen.classList.remove('active');
             });
-            document.getElementById(screenId).classList.add('active');
+            const screen = document.getElementById(screenId);
+            if (screen) {
+                screen.classList.add('active');
+            }
             gameState.currentScreen = screenId;
         }
 
         function showMainMenu() {
             showScreen('main-menu');
-            resetGameState();
+            gameState = { currentScreen: 'main-menu', gameMode: null, guessCount: 0 };
+            document.getElementById('guess-history').innerHTML = '';
+            document.getElementById('create-btn').classList.remove('hidden');
         }
 
         function showCreateLobby() {
@@ -533,332 +533,140 @@
             document.getElementById('lobby-code').value = '';
         }
 
-        function resetGameState() {
-            gameState = {
-                currentScreen: 'main-menu',
-                lobbyId: null,
-                isMyTurn: false,
-                guessHistory: [],
-                gameMode: null,
-                secretNumber: null,
-                isGameStarted: false,
-                opponentConnected: false
-            };
-            document.getElementById('guess-history').innerHTML = '';
-            updateTurnIndicator();
-        }
-
-        function updateTurnIndicator() {
-            const indicator = document.getElementById('turn-indicator');
-            const guessInput = document.getElementById('guess-input');
-            const guessBtn = document.getElementById('guess-btn');
-            
-            if (!indicator) return;
-
-            if (gameState.gameMode === 'practice') {
-                indicator.className = 'turn-indicator my-turn';
-                indicator.textContent = '🤖 Тренування з ботом - завжди ваш хід!';
-                if (guessInput) guessInput.disabled = false;
-                if (guessBtn) guessBtn.disabled = false;
-            } else if (gameState.isMyTurn) {
-                indicator.className = 'turn-indicator my-turn';
-                indicator.textContent = '🎯 Ваш хід! Вгадуйте число опонента';
-                if (guessInput) guessInput.disabled = false;
-                if (guessBtn) guessBtn.disabled = false;
-            } else {
-                indicator.className = 'turn-indicator opponent-turn';
-                indicator.textContent = '⏳ Хід опонента... Очікуйте';
-                if (guessInput) guessInput.disabled = true;
-                if (guessBtn) guessBtn.disabled = true;
-            }
-        }
-
         function sendDataToBot(data) {
-            if (tg.sendData) {
-                console.log('Sending to bot:', data);
-                tg.sendData(JSON.stringify(data));
-            } else {
-                console.log('Demo mode - would send to bot:', data);
-                handleDemoResponse(data);
-            }
-        }
-
-        function handleDemoResponse(data) {
-            setTimeout(() => {
-                switch(data.action) {
-                    case 'create_lobby':
-                        gameState.lobbyId = generateLobbyId();
-                        gameState.gameMode = 'online';
-                        document.getElementById('lobby-id').textContent = gameState.lobbyId;
-                        showScreen('create-lobby');
-                        document.getElementById('lobby-created').classList.remove('hidden');
-                        break;
-                        
-                    case 'join_lobby':
-                        gameState.lobbyId = data.lobbyId;
-                        gameState.gameMode = 'online';
-                        showScreen('set-secret');
-                        break;
-                        
-                    case 'start_practice':
-                        gameState.gameMode = 'practice';
-                        gameState.lobbyId = 'practice_' + Date.now();
-                        gameState.isMyTurn = true;
-                        gameState.isGameStarted = true;
-                        showScreen('game-play');
-                        document.getElementById('game-status').textContent = 'Тренування з ботом';
-                        updateTurnIndicator();
-                        break;
-                        
-                    case 'set_secret':
-                        gameState.secretNumber = data.secretNumber;
-                        if (gameState.gameMode === 'online') {
-                            setTimeout(() => {
-                                gameState.opponentConnected = true;
-                                gameState.isGameStarted = true;
-                                gameState.isMyTurn = Math.random() > 0.5;
-                                showScreen('game-play');
-                                updateTurnIndicator();
-                            }, 2000);
-                        }
-                        break;
-                        
-                    case 'make_guess':
-                        handleDemoGuess(data.guess);
-                        break;
-                }
-            }, 1000);
-        }
-
-        function handleDemoGuess(guess) {
-            const result = simulateGuessResult(guess);
-            addGuessToHistory(guess, result);
-            
-            document.getElementById('guess-input').value = '';
-            
-            if (result.win) {
-                setTimeout(() => showGameResult(true, gameState.guessHistory.length), 500);
-            } else {
-                if (gameState.gameMode === 'online') {
-                    gameState.isMyTurn = !gameState.isMyTurn;
-                    updateTurnIndicator();
-                }
-            }
+            tg.sendData(JSON.stringify(data));
         }
 
         function createLobby() {
-            showLoading();
-            sendDataToBot({
-                action: 'create_lobby'
-            });
+            sendDataToBot({ action: 'create_lobby' });
+            
+            document.getElementById('lobby-id').innerHTML = "Перевірте чат з ботом!<br>Там буде код кімнати.";
+            document.getElementById('lobby-created').classList.remove('hidden');
+            document.getElementById('create-btn').classList.add('hidden');
         }
 
         function joinLobby() {
             const code = document.getElementById('lobby-code').value.trim();
             if (!code) {
-                showError('Введіть код кімнати');
+                showError('Будь ласка, введіть код кімнати.');
                 return;
             }
-
-            showLoading();
-            sendDataToBot({
-                action: 'join_lobby',
-                lobbyId: code
-            });
+            sendDataToBot({ action: 'join_lobby', lobbyId: code });
+            gameState.gameMode = 'online';
+            showScreen('set-secret');
         }
 
         function startPractice() {
-            showLoading();
-            sendDataToBot({
-                action: 'start_practice'
-            });
+            sendDataToBot({ action: 'start_practice' });
+            gameState.gameMode = 'practice';
+            showScreen('game-play');
+            document.getElementById('game-status').textContent = 'Тренування з ботом';
+            document.getElementById('turn-indicator').textContent = 'Вгадайте число, яке загадав бот.';
         }
 
         function setSecretNumber() {
             const number = document.getElementById('secret-number').value;
-            
             if (!validateSecretNumber(number)) {
-                showError('Неправильне число! Перевірте вимоги.');
+                showError('Неправильне число! Число повинно складатись з 4 унікальних цифр і не починатись з 0.');
                 return;
             }
-
-            gameState.secretNumber = number;
-            showLoading();
-            
-            sendDataToBot({
-                action: 'set_secret',
-                secretNumber: number
-            });
+            sendDataToBot({ action: 'set_secret', secretNumber: number });
+            showScreen('game-play');
+            document.getElementById('game-status').textContent = 'Гра почалася!';
+            document.getElementById('turn-indicator').textContent = 'Слідкуйте за повідомленнями від бота, щоб знати, коли ваш хід.';
         }
 
         function makeGuess() {
             const guess = document.getElementById('guess-input').value;
-            
             if (!validateSecretNumber(guess)) {
-                showError('Неправильне число! Введіть 4 унікальні цифри.');
+                showError('Неправильне число! Введіть 4 унікальні цифри, що не починаються з 0.');
                 return;
             }
+            sendDataToBot({ action: 'make_guess', guess: guess });
 
-            if (gameState.gameMode === 'online' && !gameState.isMyTurn) {
-                showError('Зараз не ваш хід!');
-                return;
-            }
+            gameState.guessCount++;
+            const historyContainer = document.getElementById('guess-history');
+            const guessItem = document.createElement('div');
+            guessItem.className = 'guess-item';
+            guessItem.innerHTML = `<div class="guess-number">Спроба #${gameState.guessCount}: ${guess}</div><div class="guess-result">Результат дивіться в чаті з ботом.</div>`;
+            historyContainer.appendChild(guessItem);
+            historyContainer.scrollTop = historyContainer.scrollHeight;
 
-            sendDataToBot({
-                action: 'make_guess',
-                guess: guess
-            });
+            document.getElementById('guess-input').value = '';
+            showNotification("Ваш хід відправлено. Перевірте чат з ботом, щоб побачити результат і дізнатись, чий хід наступний.");
         }
 
         function surrenderGame() {
-            if (confirm('Ви впевнені, що хочете здатися?')) {
-                sendDataToBot({
-                    action: 'surrender'
-                });
-                showGameResult(false, gameState.guessHistory.length, true);
-            }
+            tg.showConfirm('Ви впевнені, що хочете здатися?', (confirmed) => {
+                if (confirmed) {
+                    sendDataToBot({ action: 'surrender' });
+                    showGameResult(false, gameState.guessCount, true);
+                }
+            });
         }
 
         function leaveLobby() {
-            if (confirm('Ви впевнені, що хочете покинути кімнату?')) {
-                sendDataToBot({
-                    action: 'leave_lobby'
-                });
-                showMainMenu();
-            }
+            tg.showConfirm('Ви впевнені, що хочете покинути кімнату?', (confirmed) => {
+                if(confirmed) {
+                    sendDataToBot({ action: 'leave_lobby' });
+                    showMainMenu();
+                }
+            });
         }
-
+        
         function validateSecretNumber(number) {
             if (!number || number.length !== 4) return false;
             if (number[0] === '0') return false;
             if (!/^\d{4}$/.test(number)) return false;
-            
             const digits = new Set(number.split(''));
             return digits.size === 4;
         }
-
-        function simulateGuessResult(guess) {
-            const correctDigits = Math.floor(Math.random() * 4) + 1;
-            const correctPositions = Math.floor(Math.random() * correctDigits);
-            const isWin = Math.random() > 0.8; 
-            
-            return {
-                win: isWin,
-                correctDigits: isWin ? 4 : correctDigits,
-                correctPositions: isWin ? 4 : correctPositions
-            };
-        }
-
-        function addGuessToHistory(guess, result) {
-            gameState.guessHistory.push({ guess, result });
-            
-            const historyContainer = document.getElementById('guess-history');
-            const guessItem = document.createElement('div');
-            guessItem.className = 'guess-item';
-            guessItem.innerHTML = `
-                <div class="guess-number">${guess}</div>
-                <div class="guess-result">
-                    Правильних цифр: ${result.correctDigits} | 
-                    Правильних позицій: ${result.correctPositions}
-                </div>
-            `;
-            historyContainer.appendChild(guessItem);
-            historyContainer.scrollTop = historyContainer.scrollHeight;
-        }
-
+        
         function showGameResult(won, attempts, surrendered = false) {
             const title = document.getElementById('result-title');
             const description = document.getElementById('result-description');
             const stats = document.getElementById('game-stats');
-            
-            if (won) {
-                title.textContent = '🏆 Ви перемогли!';
-                title.style.color = '#28a745';
-                description.textContent = 'Вітаємо з перемогою!';
-            } else if (surrendered) {
+
+            if (surrendered) {
                 title.textContent = '🏳️ Ви здалися';
-                title.style.color = '#dc3545';
                 description.textContent = 'Не засмучуйтесь, спробуйте ще раз!';
             } else {
-                title.textContent = '😔 Ви програли';
-                title.style.color = '#dc3545';
-                description.textContent = 'Опонент вгадав ваше число першим!';
+                 title.textContent = '🏁 Гра завершена';
+                description.textContent = 'Результат гри дивіться в чаті з ботом.';
             }
-            
             stats.textContent = `Кількість ваших ходів: ${attempts}`;
             showScreen('game-result');
         }
 
-        function generateLobbyId() {
-            return Math.random().toString(36).substring(2, 8).toUpperCase();
-        }
-
-        function showLoading() {
-            showScreen('loading');
-        }
-
         function showError(message) {
-            if (tg.showAlert) {
-                tg.showAlert(message);
-            } else {
-                alert(message);
-            }
+            tg.showAlert(message);
         }
 
         function showNotification(message) {
-            if (tg.showAlert) {
-                tg.showAlert(message);
-            } else {
-                alert(message);
-            }
+            tg.showAlert(message);
         }
 
         document.addEventListener('input', function(e) {
             if (e.target.classList.contains('number-input')) {
                 if (e.target.id === 'lobby-code') {
-                    e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
                 } else {
                     e.target.value = e.target.value.replace(/\D/g, '');
                 }
-                e.target.classList.remove('error');
             }
         });
 
         document.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                const currentScreen = gameState.currentScreen;
-                
-                switch(currentScreen) {
-                    case 'join-lobby':
-                        joinLobby();
-                        break;
-                    case 'set-secret':
-                        setSecretNumber();
-                        break;
-                    case 'game-play':
-                        if (gameState.gameMode === 'practice' || gameState.isMyTurn) {
-                            makeGuess();
-                        }
-                        break;
+                switch(gameState.currentScreen) {
+                    case 'join-lobby': joinLobby(); break;
+                    case 'set-secret': setSecretNumber(); break;
+                    case 'game-play': makeGuess(); break;
                 }
             }
         });
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const startParam = urlParams.get('start');
-            
-            if (startParam && startParam.length > 3) {
-                document.getElementById('lobby-code').value = startParam;
-                showJoinLobby();
-            }
-            
-            if (tg.initData) {
-                console.log('Telegram WebApp initialized:', tg.initDataUnsafe);
-            }
-
-            updateTurnIndicator();
-        });
+        tg.onEvent('viewportChanged', () => tg.expand());
+        showMainMenu();
     </script>
 </body>
 </html>

@@ -324,6 +324,19 @@
             margin: 10px 0;
             letter-spacing: 2px;
         }
+
+        .debug-info {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 200px;
+            word-wrap: break-word;
+        }
     </style>
 </head>
 <body>
@@ -494,16 +507,70 @@
         </div>
     </div>
 
+    <!-- Debug info for development -->
+    <div class="debug-info" id="debug-info" style="display: none;">
+        <div id="debug-text">Debug info</div>
+    </div>
+
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
+        const tg = window.Telegram?.WebApp;
+        let isWebAppReady = false;
+
+        function debug(message) {
+            console.log('[DEBUG]', message);
+            const debugEl = document.getElementById('debug-text');
+            if (debugEl) {
+                debugEl.innerHTML = `${new Date().toLocaleTimeString()}: ${message}`;
+            }
+        }
+
+        function initTelegramWebApp() {
+            if (!tg) {
+                debug('Not running in Telegram WebApp');
+                return false;
+            }
+
+            try {
+                tg.ready();
+                tg.expand();
+                
+                tg.enableClosingConfirmation();
+                
+                tg.MainButton.text = "Головне меню";
+                tg.MainButton.color = "#3390ec";
+                
+                tg.MainButton.onClick(() => {
+                    showMainMenu();
+                });
+
+                isWebAppReady = true;
+                debug('Telegram WebApp initialized');
+                return true;
+            } catch (error) {
+                debug('Error initializing Telegram WebApp: ' + error.message);
+                return false;
+            }
+        }
 
         let gameState = {
             currentScreen: 'main-menu',
             gameMode: null,
             guessCount: 0
         };
+
+        function initApp() {
+            const telegramReady = initTelegramWebApp();
+            
+            if (telegramReady) {
+                debug('Running in Telegram');
+                if (tg.initDataUnsafe?.user?.username === 'your_debug_username') {
+                    document.getElementById('debug-info').style.display = 'block';
+                }
+            } else {
+                debug('Running in browser (not Telegram)');
+                document.getElementById('debug-info').style.display = 'block';
+            }
+        }
 
         function showScreen(screenId) {
             document.querySelectorAll('.game-screen').forEach(screen => {
@@ -514,6 +581,25 @@
                 screen.classList.add('active');
             }
             gameState.currentScreen = screenId;
+            
+            updateMainButton(screenId);
+        }
+
+        function updateMainButton(screenId) {
+            if (!tg || !isWebAppReady) return;
+            
+            switch(screenId) {
+                case 'main-menu':
+                    tg.MainButton.hide();
+                    break;
+                case 'game-play':
+                    tg.MainButton.text = "Здатися";
+                    tg.MainButton.show();
+                    break;
+                default:
+                    tg.MainButton.text = "Назад";
+                    tg.MainButton.show();
+            }
         }
 
         function showMainMenu() {
@@ -534,13 +620,43 @@
         }
 
         function sendDataToBot(data) {
-            tg.sendData(JSON.stringify(data));
+            debug(`Sending data: ${JSON.stringify(data)}`);
+            
+            if (tg && isWebAppReady) {
+                try {
+                    tg.sendData(JSON.stringify(data));
+                    debug('Data sent via Telegram WebApp');
+                } catch (error) {
+                    debug('Error sending data: ' + error.message);
+                    showError('Помилка відправки даних: ' + error.message);
+                }
+            } else {
+                debug('Telegram WebApp not available, simulating response');
+                simulateResponse(data);
+            }
+        }
+
+        function simulateResponse(data) {
+            setTimeout(() => {
+                switch(data.action) {
+                    case 'create_lobby':
+                        document.getElementById('lobby-id').textContent = 'TEST-LOBBY-123';
+                        document.getElementById('lobby-created').classList.remove('hidden');
+                        document.getElementById('create-btn').classList.add('hidden');
+                        break;
+                    case 'start_practice':
+                        showScreen('game-play');
+                        document.getElementById('game-status').textContent = 'Тренування з ботом';
+                        break;
+                }
+            }, 500);
         }
 
         function createLobby() {
+            debug('Creating lobby...');
             sendDataToBot({ action: 'create_lobby' });
             
-            document.getElementById('lobby-id').innerHTML = "Перевірте чат з ботом!<br>Там буде код кімнати.";
+            document.getElementById('lobby-id').innerHTML = "Створюємо кімнату...";
             document.getElementById('lobby-created').classList.remove('hidden');
             document.getElementById('create-btn').classList.add('hidden');
         }
@@ -551,12 +667,14 @@
                 showError('Будь ласка, введіть код кімнати.');
                 return;
             }
+            debug(`Joining lobby: ${code}`);
             sendDataToBot({ action: 'join_lobby', lobbyId: code });
             gameState.gameMode = 'online';
             showScreen('set-secret');
         }
 
         function startPractice() {
+            debug('Starting practice...');
             sendDataToBot({ action: 'start_practice' });
             gameState.gameMode = 'practice';
             showScreen('game-play');
@@ -570,6 +688,7 @@
                 showError('Неправильне число! Число повинно складатись з 4 унікальних цифр і не починатись з 0.');
                 return;
             }
+            debug(`Setting secret number: ${number}`);
             sendDataToBot({ action: 'set_secret', secretNumber: number });
             showScreen('game-play');
             document.getElementById('game-status').textContent = 'Гра почалася!';
@@ -582,6 +701,8 @@
                 showError('Неправильне число! Введіть 4 унікальні цифри, що не починаються з 0.');
                 return;
             }
+            
+            debug(`Making guess: ${guess}`);
             sendDataToBot({ action: 'make_guess', guess: guess });
 
             gameState.guessCount++;
@@ -597,21 +718,35 @@
         }
 
         function surrenderGame() {
-            tg.showConfirm('Ви впевнені, що хочете здатися?', (confirmed) => {
-                if (confirmed) {
-                    sendDataToBot({ action: 'surrender' });
-                    showGameResult(false, gameState.guessCount, true);
+            const confirmAction = () => {
+                debug('Surrendering game...');
+                sendDataToBot({ action: 'surrender' });
+                showGameResult(false, gameState.guessCount, true);
+            };
+
+            if (tg && isWebAppReady) {
+                tg.showConfirm('Ви впевнені, що хочете здатися?', confirmAction);
+            } else {
+                if (confirm('Ви впевнені, що хочете здатися?')) {
+                    confirmAction();
                 }
-            });
+            }
         }
 
         function leaveLobby() {
-            tg.showConfirm('Ви впевнені, що хочете покинути кімнату?', (confirmed) => {
-                if(confirmed) {
-                    sendDataToBot({ action: 'leave_lobby' });
-                    showMainMenu();
+            const confirmAction = () => {
+                debug('Leaving lobby...');
+                sendDataToBot({ action: 'leave_lobby' });
+                showMainMenu();
+            };
+
+            if (tg && isWebAppReady) {
+                tg.showConfirm('Ви впевнені, що хочете покинути кімнату?', confirmAction);
+            } else {
+                if (confirm('Ви впевнені, що хочете покинути кімнату?')) {
+                    confirmAction();
                 }
-            });
+            }
         }
         
         function validateSecretNumber(number) {
@@ -639,11 +774,21 @@
         }
 
         function showError(message) {
-            tg.showAlert(message);
+            debug(`Error: ${message}`);
+            if (tg && isWebAppReady) {
+                tg.showAlert(message);
+            } else {
+                alert(message);
+            }
         }
 
         function showNotification(message) {
-            tg.showAlert(message);
+            debug(`Notification: ${message}`);
+            if (tg && isWebAppReady) {
+                tg.showAlert(message);
+            } else {
+                alert(message);
+            }
         }
 
         document.addEventListener('input', function(e) {
@@ -665,8 +810,17 @@
             }
         });
 
-        tg.onEvent('viewportChanged', () => tg.expand());
-        showMainMenu();
+        if (tg) {
+            tg.onEvent('viewportChanged', () => {
+                debug('Viewport changed');
+                tg.expand();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initApp();
+            showMainMenu();
+        });
     </script>
 </body>
 </html>

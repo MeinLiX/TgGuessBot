@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="uk">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -55,8 +56,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .menu-button {
@@ -163,9 +171,19 @@
         }
 
         @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
         }
 
         .game-info {
@@ -252,8 +270,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .invite-link {
@@ -329,7 +352,7 @@
             position: fixed;
             bottom: 10px;
             right: 10px;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.8);
             color: white;
             padding: 10px;
             border-radius: 5px;
@@ -339,6 +362,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div id="main-menu" class="game-screen active">
@@ -350,19 +374,19 @@
             <div class="rules">
                 <h4>🎮 Правила гри:</h4>
                 <p>• Кожен гравець задумує 4-значне число з унікальними цифрами<br>
-                • Перша цифра не може бути 0<br>
-                • По черзі вгадуєте числа опонента<br>
-                • Отримуєте підказки: кількість правильних цифр і позицій</p>
+                    • Перша цифра не може бути 0<br>
+                    • По черзі вгадуєте числа опонента<br>
+                    • Отримуєте підказки: кількість правильних цифр і позицій</p>
             </div>
 
             <button class="menu-button" onclick="showCreateLobby()">
                 <span class="emoji">👥</span> Створити кімнату
             </button>
-            
+
             <button class="menu-button secondary" onclick="showJoinLobby()">
                 <span class="emoji">🚪</span> Приєднатися до кімнати
             </button>
-            
+
             <button class="menu-button secondary" onclick="startPractice()">
                 <span class="emoji">🤖</span> Тренування з ботом
             </button>
@@ -378,7 +402,7 @@
                 <div class="status-message status-waiting">
                     🕒 Очікування другого гравця...
                 </div>
-                
+
                 <div class="lobby-info">
                     <h3>Код кімнати:</h3>
                     <div class="lobby-id" id="lobby-id">
@@ -428,8 +452,8 @@
             <div class="rules">
                 <h4>⚠️ Вимоги:</h4>
                 <p>• 4 цифри (1023-9876)<br>
-                • Всі цифри унікальні<br>
-                • Не починається з 0</p>
+                    • Всі цифри унікальні<br>
+                    • Не починається з 0</p>
             </div>
 
             <div class="input-group">
@@ -506,8 +530,10 @@
             </div>
         </div>
     </div>
-
-    <!-- Debug info for development -->
+    <div id="error-screen" class="container hidden">
+        <h2>Помилка запуску</h2>
+        <p>Цю гру можна запустити тільки через клієнт Telegram.</p>
+    </div>
     <div class="debug-info" id="debug-info" style="display: none;">
         <div id="debug-text">Debug info</div>
     </div>
@@ -533,16 +559,7 @@
             try {
                 tg.ready();
                 tg.expand();
-                
                 tg.enableClosingConfirmation();
-                
-                tg.MainButton.text = "Головне меню";
-                tg.MainButton.color = "#3390ec";
-                
-                tg.MainButton.onClick(() => {
-                    showMainMenu();
-                });
-
                 isWebAppReady = true;
                 debug('Telegram WebApp initialized');
                 return true;
@@ -560,15 +577,16 @@
 
         function initApp() {
             const telegramReady = initTelegramWebApp();
-            
+
             if (telegramReady) {
                 debug('Running in Telegram');
-                if (tg.initDataUnsafe?.user?.username === 'your_debug_username') {
-                    document.getElementById('debug-info').style.display = 'block';
-                }
+                document.getElementById('app-container').classList.remove('hidden');
+                document.getElementById('error-screen').classList.add('hidden');
+                showMainMenu();
             } else {
                 debug('Running in browser (not Telegram)');
-                document.getElementById('debug-info').style.display = 'block';
+                document.getElementById('app-container').classList.add('hidden');
+                document.getElementById('error-screen').classList.remove('hidden');
             }
         }
 
@@ -581,14 +599,14 @@
                 screen.classList.add('active');
             }
             gameState.currentScreen = screenId;
-            
+
             updateMainButton(screenId);
         }
 
         function updateMainButton(screenId) {
             if (!tg || !isWebAppReady) return;
-            
-            switch(screenId) {
+
+            switch (screenId) {
                 case 'main-menu':
                     tg.MainButton.hide();
                     break;
@@ -621,7 +639,7 @@
 
         function sendDataToBot(data) {
             debug(`Sending data: ${JSON.stringify(data)}`);
-            
+
             if (tg && isWebAppReady) {
                 try {
                     tg.sendData(JSON.stringify(data));
@@ -631,31 +649,15 @@
                     showError('Помилка відправки даних: ' + error.message);
                 }
             } else {
-                debug('Telegram WebApp not available, simulating response');
-                simulateResponse(data);
+                debug('Telegram WebApp not available. Cannot send data.');
+                showError('Неможливо відправити дані. Переконайтесь, що гра запущена через Telegram.');
             }
-        }
-
-        function simulateResponse(data) {
-            setTimeout(() => {
-                switch(data.action) {
-                    case 'create_lobby':
-                        document.getElementById('lobby-id').textContent = 'TEST-LOBBY-123';
-                        document.getElementById('lobby-created').classList.remove('hidden');
-                        document.getElementById('create-btn').classList.add('hidden');
-                        break;
-                    case 'start_practice':
-                        showScreen('game-play');
-                        document.getElementById('game-status').textContent = 'Тренування з ботом';
-                        break;
-                }
-            }, 500);
         }
 
         function createLobby() {
             debug('Creating lobby...');
             sendDataToBot({ action: 'create_lobby' });
-            
+
             document.getElementById('lobby-id').innerHTML = "Створюємо кімнату...";
             document.getElementById('lobby-created').classList.remove('hidden');
             document.getElementById('create-btn').classList.add('hidden');
@@ -701,7 +703,7 @@
                 showError('Неправильне число! Введіть 4 унікальні цифри, що не починаються з 0.');
                 return;
             }
-            
+
             debug(`Making guess: ${guess}`);
             sendDataToBot({ action: 'make_guess', guess: guess });
 
@@ -748,7 +750,7 @@
                 }
             }
         }
-        
+
         function validateSecretNumber(number) {
             if (!number || number.length !== 4) return false;
             if (number[0] === '0') return false;
@@ -756,7 +758,7 @@
             const digits = new Set(number.split(''));
             return digits.size === 4;
         }
-        
+
         function showGameResult(won, attempts, surrendered = false) {
             const title = document.getElementById('result-title');
             const description = document.getElementById('result-description');
@@ -766,7 +768,7 @@
                 title.textContent = '🏳️ Ви здалися';
                 description.textContent = 'Не засмучуйтесь, спробуйте ще раз!';
             } else {
-                 title.textContent = '🏁 Гра завершена';
+                title.textContent = '🏁 Гра завершена';
                 description.textContent = 'Результат гри дивіться в чаті з ботом.';
             }
             stats.textContent = `Кількість ваших ходів: ${attempts}`;
@@ -791,7 +793,7 @@
             }
         }
 
-        document.addEventListener('input', function(e) {
+        document.addEventListener('input', function (e) {
             if (e.target.classList.contains('number-input')) {
                 if (e.target.id === 'lobby-code') {
                 } else {
@@ -800,9 +802,9 @@
             }
         });
 
-        document.addEventListener('keypress', function(e) {
+        document.addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
-                switch(gameState.currentScreen) {
+                switch (gameState.currentScreen) {
                     case 'join-lobby': joinLobby(); break;
                     case 'set-secret': setSecretNumber(); break;
                     case 'game-play': makeGuess(); break;
@@ -817,10 +819,10 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             initApp();
-            showMainMenu();
         });
     </script>
 </body>
+
 </html>

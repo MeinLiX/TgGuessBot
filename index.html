@@ -27,8 +27,14 @@
         .btn-danger { @apply bg-red-600 text-white; }
         .input-field { @apply w-full border-2 rounded-xl text-center text-3xl tracking-[0.2em] p-4 outline-none transition-colors; background-color: var(--tg-secondary-bg); border-color: transparent; }
         .input-field:focus { border-color: var(--tg-button); }
-        .screen { @apply hidden; }
-        .screen.active { @apply block animate-fade-in; }
+        
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+            animation: fade-in 0.3s ease-out;
+        }
         @keyframes fade-in {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -38,6 +44,10 @@
 <body class="flex items-center justify-center min-h-screen p-4">
 
     <div id="app-container" class="w-full max-w-sm mx-auto">
+        <div id="loading-screen" class="screen active text-center">
+             <h1 class="text-2xl font-bold">Завантаження гри...</h1>
+        </div>
+
         <div id="error-screen" class="screen">
             <div class="p-6 rounded-xl text-center" style="background-color: var(--tg-secondary-bg);">
                 <h1 class="text-2xl font-bold mb-2">🚫 Помилка</h1>
@@ -108,6 +118,7 @@
     const tg = window.Telegram.WebApp;
 
     const screens = {
+        loading: document.getElementById('loading-screen'),
         error: document.getElementById('error-screen'),
         mainMenu: document.getElementById('main-menu'),
         waiting: document.getElementById('waiting-lobby'),
@@ -122,12 +133,14 @@
         const screenElement = Object.values(screens).find(s => s.id === screenId);
         if (screenElement) {
             screenElement.classList.add('active');
+        } else {
+            console.error(`Screen with id ${screenId} not found.`);
         }
         tg.HapticFeedback.impactOccurred('light');
     }
 
     function updateUI(state) {
-        if (!state || state.status === 'not_in_game') {
+        if (!state || !state.status || state.status === 'not_in_game') {
             showScreen('main-menu');
             return;
         }
@@ -171,21 +184,23 @@
 
         const historyContainer = document.getElementById('guess-history');
         historyContainer.innerHTML = '';
-        state.history.forEach(item => {
-            const historyItem = document.createElement('div');
-            historyItem.className = 'p-3 rounded-md';
-            historyItem.style.backgroundColor = 'rgba(0,0,0,0.2)';
-            historyItem.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <span class="text-xl font-mono tracking-widest">${item.guess}</span>
-                    <div class="text-right text-sm">
-                        <p>Збігів: <span class="font-bold">${item.sameDigits}</span></p>
-                        <p>На місці: <span class="font-bold">${item.samePositions}</span></p>
+        if (state.history && Array.isArray(state.history)) {
+            state.history.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'p-3 rounded-md';
+                historyItem.style.backgroundColor = 'rgba(0,0,0,0.2)';
+                historyItem.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="text-xl font-mono tracking-widest">${item.guess}</span>
+                        <div class="text-right text-sm">
+                            <p>Збігів: <span class="font-bold">${item.sameDigits}</span></p>
+                            <p>На місці: <span class="font-bold">${item.samePositions}</span></p>
+                        </div>
                     </div>
-                </div>
-            `;
-            historyContainer.appendChild(historyItem);
-        });
+                `;
+                historyContainer.appendChild(historyItem);
+            });
+        }
     }
 
     function updateGameResultUI(state) {
@@ -195,12 +210,17 @@
     }
 
     function sendData(data) {
-        if (!tg.initData) {
+        try {
+            if (!tg.initData) {
+                showScreen('error-screen');
+                return;
+            }
+            console.log("Sending data:", data);
+            tg.sendData(JSON.stringify(data));
+        } catch (e) {
+            console.error("Error sending data or accessing Telegram properties:", e);
             showScreen('error-screen');
-            return;
         }
-        console.log("Sending data:", data);
-        tg.sendData(JSON.stringify(data));
     }
 
     function requestStateUpdate() {
@@ -208,10 +228,13 @@
     }
 
     function shareInvite() {
-        const lobbyId = document.getElementById('lobby-id-display').textContent;
-        const text = `Привіт! Запрошую тебе зіграти в "Вгадай Число". Приєднуйся до моєї кімнати!`;
-        const url = `https://t.me/${tg.initDataUnsafe.bot.username}/app?startapp=${lobbyId}`;
-        tg.switchInlineQuery(lobbyId, ['users', 'groups']);
+        try {
+            const lobbyId = document.getElementById('lobby-id-display').textContent;
+            tg.switchInlineQuery(lobbyId, ['users', 'groups']);
+        } catch(e) {
+             console.error("Sharing is not available on this platform", e);
+             tg.showAlert("Sharing is not available on your device.");
+        }
     }
 
     const createLobby = () => sendData({ action: 'create_lobby' });
@@ -248,45 +271,52 @@
         document.getElementById('guess-input').value = '';
     }
 
-    // --- INITIALIZATION ---
     document.addEventListener('DOMContentLoaded', () => {
-        if (!tg.initData) {
-            showScreen('error-screen');
-            return;
-        }
-        
-        tg.ready();
-        tg.expand();
-        tg.setHeaderColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-secondary-bg').trim());
-        tg.setBackgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-bg').trim());
-
-        tg.onEvent('web_app_data_received', (data) => {
-            try {
-                if(data && data.data) {
-                    const state = JSON.parse(data.data);
-                    console.log("Received state:", state);
-                    updateUI(state);
-                }
-            } catch(e) {
-                console.error("Failed to parse event data", e);
-                tg.showAlert("Помилка оновлення даних гри.");
-            }
-        });
-
-        tg.onEvent('viewportChanged', (event) => {
-            if (!event.isStateStable) {
+        try {
+             if (!tg || !tg.initData) {
+                showScreen('error-screen');
                 return;
             }
-            requestStateUpdate();
-        });
 
-        const startParam = tg.initDataUnsafe.start_param;
-        if (startParam) {
-            sendData({ action: 'join_lobby', lobbyId: startParam });
-        } else {
-            requestStateUpdate();
+            tg.ready();
+            tg.expand();
+            tg.setHeaderColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-secondary-bg').trim());
+            tg.setBackgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-bg').trim());
+
+            tg.onEvent('web_app_data_received', (data) => {
+                try {
+                    if(data && data.data) {
+                        const state = JSON.parse(data.data);
+                        console.log("Received state:", state);
+                        updateUI(state);
+                    }
+                } catch(e) {
+                    console.error("Failed to parse event data", e);
+                    tg.showAlert("Помилка оновлення даних гри.");
+                }
+            });
+
+            tg.onEvent('viewportChanged', (event) => {
+                if (!event.isStateStable) {
+                    return;
+                }
+                requestStateUpdate();
+            });
+
+            const startParam = tg.initDataUnsafe.start_param;
+            if (startParam) {
+                document.getElementById('lobby-code-input').value = startParam;
+                showScreen('join-lobby');
+                sendData({ action: 'join_lobby', lobbyId: startParam });
+            } else {
+                requestStateUpdate();
+            }
+        } catch (e) {
+            console.error("Initialization failed:", e);
+            showScreen('error-screen');
         }
     });
 </script>
 </body>
 </html>
+

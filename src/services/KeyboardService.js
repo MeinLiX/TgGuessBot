@@ -26,12 +26,6 @@ class KeyboardService {
             callback_data: CALLBACK_DATA.TRY_START_PRACTICE
           }
         ],
-        [{
-          text: '🎮 Відкрити гру',
-          web_app: {
-            url: process.env.WEBAPP_URL
-          }
-        }]
       ]
     };
   }

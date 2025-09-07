@@ -1,828 +1,292 @@
 <!DOCTYPE html>
 <html lang="uk">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Гра Вгадай Число</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Вгадай Число</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --tg-bg: var(--tg-theme-bg-color, #18181b);
+            --tg-text: var(--tg-theme-text-color, #ffffff);
+            --tg-hint: var(--tg-theme-hint-color, #9ca3af);
+            --tg-button: var(--tg-theme-button-color, #3b82f6);
+            --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
+            --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #27272a);
         }
-
         body {
+            background-color: var(--tg-bg);
+            color: var(--tg-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--tg-theme-bg-color, #ffffff);
-            color: var(--tg-theme-text-color, #000000);
-            padding: 20px;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
+            overscroll-behavior: none;
         }
-
-        .container {
-            max-width: 400px;
-            margin: 0 auto;
-            width: 100%;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: var(--tg-theme-text-color, #000000);
-        }
-
-        .header p {
-            color: var(--tg-theme-hint-color, #999999);
-            font-size: 14px;
-        }
-
-        .game-screen {
-            display: none;
-            animation: fadeIn 0.3s ease-in;
-        }
-
-        .game-screen.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .menu-button {
-            background: var(--tg-theme-button-color, #3390ec);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            border: none;
-            border-radius: 12px;
-            padding: 16px 20px;
-            font-size: 16px;
-            font-weight: 500;
-            width: 100%;
-            margin-bottom: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .menu-button:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-
-        .menu-button:active {
-            transform: translateY(0);
-        }
-
-        .menu-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .menu-button.secondary {
-            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            color: var(--tg-theme-text-color, #000000);
-        }
-
-        .menu-button.danger {
-            background: #ff3b30;
-            color: white;
-        }
-
-        .turn-indicator {
-            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-            border-radius: 12px;
-            padding: 12px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-weight: 500;
-        }
-
-        .turn-indicator.my-turn {
-            background: #d4edda;
-            color: #155724;
-            border: 2px solid #28a745;
-        }
-
-        .turn-indicator.opponent-turn {
-            background: #fff3cd;
-            color: #856404;
-            border: 2px solid #ffc107;
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-        }
-
-        .input-label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: var(--tg-theme-text-color, #000000);
-        }
-
-        .number-input {
-            width: 100%;
-            padding: 16px;
-            border: 2px solid var(--tg-theme-secondary-bg-color, #f0f0f0);
-            border-radius: 12px;
-            font-size: 18px;
-            text-align: center;
-            letter-spacing: 4px;
-            background: var(--tg-theme-bg-color, #ffffff);
-            color: var(--tg-theme-text-color, #000000);
-            outline: none;
-            transition: border-color 0.2s ease;
-        }
-
-        .number-input:focus {
-            border-color: var(--tg-theme-button-color, #3390ec);
-        }
-
-        .number-input:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .number-input.error {
-            border-color: #ff3b30;
-            animation: shake 0.3s ease-in-out;
-        }
-
-        @keyframes shake {
-
-            0%,
-            100% {
-                transform: translateX(0);
-            }
-
-            25% {
-                transform: translateX(-5px);
-            }
-
-            75% {
-                transform: translateX(5px);
-            }
-        }
-
-        .game-info {
-            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 20px;
-        }
-
-        .game-info h3 {
-            margin-bottom: 10px;
-            color: var(--tg-theme-text-color, #000000);
-        }
-
-        .guess-history {
-            max-height: 200px;
-            overflow-y: auto;
-            margin-bottom: 20px;
-        }
-
-        .guess-item {
-            background: var(--tg-theme-bg-color, #ffffff);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 8px;
-            border-left: 4px solid var(--tg-theme-button-color, #3390ec);
-        }
-
-        .guess-number {
-            font-size: 18px;
-            font-weight: bold;
-            letter-spacing: 2px;
-            margin-bottom: 4px;
-        }
-
-        .guess-result {
-            font-size: 14px;
-            color: var(--tg-theme-hint-color, #999999);
-        }
-
-        .status-message {
-            text-align: center;
-            padding: 16px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
-
-        .status-waiting {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .status-playing {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-
-        .status-won {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-lost {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 20px;
-        }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--tg-theme-hint-color, #cccccc);
-            border-top: 2px solid var(--tg-theme-button-color, #3390ec);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        .invite-link {
-            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            border-radius: 8px;
-            padding: 12px;
-            margin: 16px 0;
-            word-break: break-all;
-            font-family: monospace;
-            font-size: 14px;
-        }
-
-        .copy-button {
-            background: var(--tg-theme-button-color, #3390ec);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            font-size: 14px;
-            cursor: pointer;
-            margin-top: 8px;
-        }
-
-        .game-controls {
-            position: sticky;
-            bottom: 0;
-            background: var(--tg-theme-bg-color, #ffffff);
-            padding: 16px 0;
-            margin-top: auto;
-        }
-
-        .rules {
-            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-
-        .rules h4 {
-            margin-bottom: 8px;
-            color: var(--tg-theme-text-color, #000000);
-        }
-
-        .emoji {
-            font-size: 24px;
-            margin-right: 8px;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        .lobby-info {
-            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .lobby-id {
-            font-family: monospace;
-            font-size: 18px;
-            font-weight: bold;
-            color: var(--tg-theme-button-color, #3390ec);
-            margin: 10px 0;
-            letter-spacing: 2px;
-        }
-
-        .debug-info {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            max-width: 200px;
-            word-wrap: break-word;
+        .btn { @apply w-full text-center py-3 px-4 rounded-xl font-semibold transition-transform duration-200 active:scale-95 shadow-lg; }
+        .btn-primary { background-color: var(--tg-button); color: var(--tg-button-text); }
+        .btn-secondary { background-color: var(--tg-secondary-bg); color: var(--tg-text); }
+        .btn-danger { @apply bg-red-600 text-white; }
+        .input-field { @apply w-full border-2 rounded-xl text-center text-3xl tracking-[0.2em] p-4 outline-none transition-colors; background-color: var(--tg-secondary-bg); border-color: transparent; }
+        .input-field:focus { border-color: var(--tg-button); }
+        .screen { @apply hidden; }
+        .screen.active { @apply block animate-fade-in; }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
+<body class="flex items-center justify-center min-h-screen p-4">
 
-<body>
-    <div class="container">
-        <div id="main-menu" class="game-screen active">
-            <div class="header">
-                <h1>🎯 Вгадай Число</h1>
-                <p>Гра для двох гравців</p>
-            </div>
-
-            <div class="rules">
-                <h4>🎮 Правила гри:</h4>
-                <p>• Кожен гравець задумує 4-значне число з унікальними цифрами<br>
-                    • Перша цифра не може бути 0<br>
-                    • По черзі вгадуєте числа опонента<br>
-                    • Отримуєте підказки: кількість правильних цифр і позицій</p>
-            </div>
-
-            <button class="menu-button" onclick="showCreateLobby()">
-                <span class="emoji">👥</span> Створити кімнату
-            </button>
-
-            <button class="menu-button secondary" onclick="showJoinLobby()">
-                <span class="emoji">🚪</span> Приєднатися до кімнати
-            </button>
-
-            <button class="menu-button secondary" onclick="startPractice()">
-                <span class="emoji">🤖</span> Тренування з ботом
-            </button>
-        </div>
-
-        <div id="create-lobby" class="game-screen">
-            <div class="header">
-                <h1>📱 Створення кімнати</h1>
-                <p>Запросіть друга для гри</p>
-            </div>
-
-            <div id="lobby-created" class="hidden">
-                <div class="status-message status-waiting">
-                    🕒 Очікування другого гравця...
-                </div>
-
-                <div class="lobby-info">
-                    <h3>Код кімнати:</h3>
-                    <div class="lobby-id" id="lobby-id">
-                        LOADING...
-                    </div>
-                    <p>Передайте цей код другу для приєднання</p>
-                </div>
-            </div>
-
-            <div class="game-controls">
-                <button class="menu-button" onclick="createLobby()" id="create-btn">
-                    <span class="emoji">🎯</span> Створити кімнату
-                </button>
-                <button class="menu-button secondary" onclick="showMainMenu()">
-                    ← Назад
-                </button>
+    <div id="app-container" class="w-full max-w-sm mx-auto">
+        <div id="error-screen" class="screen">
+            <div class="p-6 rounded-xl text-center" style="background-color: var(--tg-secondary-bg);">
+                <h1 class="text-2xl font-bold mb-2">🚫 Помилка</h1>
+                <p style="color: var(--tg-hint);">Цей додаток можна запустити лише через клієнт Telegram.</p>
             </div>
         </div>
 
-        <div id="join-lobby" class="game-screen">
-            <div class="header">
-                <h1>🚪 Приєднатися</h1>
-                <p>Введіть код кімнати</p>
+        <div id="main-menu" class="screen space-y-4">
+            <div class="text-center mb-6">
+                <h1 class="text-4xl font-bold">🎯 Вгадай Число</h1>
+                <p style="color: var(--tg-hint);">Перевір свою інтуїцію</p>
             </div>
-
-            <div class="input-group">
-                <label class="input-label">Код кімнати:</label>
-                <input type="text" class="number-input" id="lobby-code" placeholder="Введіть код" maxlength="36">
-            </div>
-
-            <div class="game-controls">
-                <button class="menu-button" onclick="joinLobby()">
-                    <span class="emoji">🚀</span> Приєднатися
-                </button>
-                <button class="menu-button secondary" onclick="showMainMenu()">
-                    ← Назад
-                </button>
-            </div>
+            <button class="btn btn-primary" onclick="createLobby()">👥 Створити гру</button>
+            <button class="btn btn-secondary" onclick="showScreen('join-lobby')">🚪 Приєднатися</button>
+            <button class="btn btn-secondary" onclick="startPractice()">🤖 Тренування з ботом</button>
         </div>
 
-        <div id="set-secret" class="game-screen">
-            <div class="header">
-                <h1>🔒 Секретне число</h1>
-                <p>Введіть ваше 4-значне число</p>
+        <div id="waiting-lobby" class="screen text-center space-y-4">
+            <h1 class="text-2xl font-bold">Очікування гравця...</h1>
+            <div class="p-4 rounded-lg" style="background-color: var(--tg-secondary-bg);">
+                <p class="text-sm" style="color: var(--tg-hint);">Код кімнати:</p>
+                <p id="lobby-id-display" class="font-mono text-xl break-all"></p>
             </div>
-
-            <div class="rules">
-                <h4>⚠️ Вимоги:</h4>
-                <p>• 4 цифри (1023-9876)<br>
-                    • Всі цифри унікальні<br>
-                    • Не починається з 0</p>
-            </div>
-
-            <div class="input-group">
-                <label class="input-label">Ваше секретне число:</label>
-                <input type="text" class="number-input" id="secret-number" placeholder="1234" maxlength="4">
-            </div>
-
-            <div class="game-controls">
-                <button class="menu-button" onclick="setSecretNumber()">
-                    <span class="emoji">✅</span> Підтвердити
-                </button>
-                <button class="menu-button danger" onclick="leaveLobby()">
-                    🚪 Покинути кімнату
-                </button>
-            </div>
+            <p style="color: var(--tg-hint);">Поділіться кодом з другом або натисніть кнопку нижче.</p>
+            <button class="btn btn-primary" onclick="shareInvite()">🔗 Поділитися запрошенням</button>
+            <button class="btn btn-danger" onclick="leaveLobby()">🚪 Покинути кімнату</button>
+        </div>
+        
+        <div id="join-lobby" class="screen space-y-4">
+            <h1 class="text-2xl font-bold text-center">Приєднатися до гри</h1>
+            <input type="text" id="lobby-code-input" class="input-field" placeholder="КОД КІМНАТИ">
+            <button class="btn btn-primary" onclick="joinLobby()">🚀 Увійти</button>
+            <button class="btn btn-secondary" onclick="showScreen('main-menu')">← Назад</button>
         </div>
 
-        <div id="game-play" class="game-screen">
-            <div class="header">
-                <h1>🎮 Гра почалася!</h1>
-                <p id="game-status">Ваш хід</p>
-            </div>
-
-            <div id="turn-indicator" class="turn-indicator my-turn">
-                🎯 Ваш хід! Вгадуйте число опонента
-            </div>
-
-            <div class="game-info">
-                <h3>🎯 Ваші спроби:</h3>
-                <div class="guess-history" id="guess-history">
-                </div>
-            </div>
-
-            <div class="input-group">
-                <label class="input-label">Вгадайте число опонента:</label>
-                <input type="text" class="number-input" id="guess-input" placeholder="1234" maxlength="4">
-            </div>
-
-            <div class="game-controls">
-                <button class="menu-button" onclick="makeGuess()" id="guess-btn">
-                    <span class="emoji">🎯</span> Зробити хід
-                </button>
-                <button class="menu-button secondary" onclick="surrenderGame()">
-                    🏳️ Здатися
-                </button>
-            </div>
+        <div id="set-secret" class="screen space-y-4 text-center">
+            <h1 class="text-2xl font-bold">🔒 Ваше число</h1>
+            <p style="color: var(--tg-hint);">Загадайте 4-значне число з унікальними цифрами (не починається з 0).</p>
+            <input type="text" id="secret-number-input" class="input-field" placeholder="1234" maxlength="4" inputmode="numeric">
+            <div id="secret-status" class="pt-2 text-sm" style="color: var(--tg-hint);"></div>
+            <button class="btn btn-primary" onclick="setSecretNumber()">✅ Підтвердити</button>
         </div>
 
-        <div id="game-result" class="game-screen">
-            <div class="header">
-                <h1 id="result-title">🏆 Ви перемогли!</h1>
-                <p id="result-description">Вітаємо з перемогою!</p>
+        <div id="game-play" class="screen space-y-4">
+            <div id="turn-indicator" class="text-center text-lg font-semibold p-3 rounded-xl"></div>
+            <input type="text" id="guess-input" class="input-field" placeholder="...." maxlength="4" inputmode="numeric">
+            <button id="guess-btn" class="btn btn-primary" onclick="makeGuess()">🎯 Вгадати</button>
+            
+            <div class="space-y-2 pt-4">
+                 <h3 class="text-lg font-bold text-center">Історія ходів</h3>
+                 <div id="guess-history" class="h-48 overflow-y-auto p-3 rounded-lg space-y-2" style="background-color: var(--tg-secondary-bg);"></div>
             </div>
-
-            <div class="game-info" id="final-stats">
-                <h3>📊 Статистика гри:</h3>
-                <p id="game-stats">Кількість ходів: 5</p>
-            </div>
-
-            <div class="game-controls">
-                <button class="menu-button" onclick="showMainMenu()">
-                    <span class="emoji">🏠</span> Головне меню
-                </button>
-                <button class="menu-button secondary" onclick="startPractice()">
-                    🔄 Грати знову
-                </button>
-            </div>
+            <button class="btn btn-danger" onclick="surrenderGame()">🏳️ Здатися</button>
         </div>
 
-        <div id="loading" class="game-screen">
-            <div class="loading">
-                <div class="spinner"></div>
-                <span>Завантаження...</span>
+        <div id="game-result" class="screen text-center space-y-4">
+            <h1 id="result-title" class="text-4xl font-bold"></h1>
+            <p id="result-description" style="color: var(--tg-hint);"></p>
+            <div class="p-4 rounded-lg" style="background-color: var(--tg-secondary-bg);">
+                <p>Секретне число опонента:</p>
+                <p id="opponent-secret-number" class="font-bold text-3xl tracking-widest text-sky-400"></p>
             </div>
+            <button class="btn btn-primary" onclick="showScreen('main-menu'); requestStateUpdate();">🏠 Головне меню</button>
         </div>
     </div>
-    <div id="error-screen" class="container hidden">
-        <h2>Помилка запуску</h2>
-        <p>Цю гру можна запустити тільки через клієнт Telegram.</p>
-    </div>
-    <div class="debug-info" id="debug-info" style="display: none;">
-        <div id="debug-text">Debug info</div>
-    </div>
 
-    <script>
-        const tg = window.Telegram?.WebApp;
-        let isWebAppReady = false;
+<script>
+    const tg = window.Telegram.WebApp;
 
-        function debug(message) {
-            console.log('[DEBUG]', message);
-            const debugEl = document.getElementById('debug-text');
-            if (debugEl) {
-                debugEl.innerHTML = `${new Date().toLocaleTimeString()}: ${message}`;
-            }
+    const screens = {
+        error: document.getElementById('error-screen'),
+        mainMenu: document.getElementById('main-menu'),
+        waiting: document.getElementById('waiting-lobby'),
+        join: document.getElementById('join-lobby'),
+        setSecret: document.getElementById('set-secret'),
+        gamePlay: document.getElementById('game-play'),
+        gameResult: document.getElementById('game-result'),
+    };
+
+    function showScreen(screenId) {
+        Object.values(screens).forEach(s => s.classList.remove('active'));
+        const screenElement = Object.values(screens).find(s => s.id === screenId);
+        if (screenElement) {
+            screenElement.classList.add('active');
         }
+        tg.HapticFeedback.impactOccurred('light');
+    }
 
-        function initTelegramWebApp() {
-            if (!tg) {
-                debug('Not running in Telegram WebApp');
-                return false;
-            }
-
-            try {
-                tg.ready();
-                tg.expand();
-                tg.enableClosingConfirmation();
-                isWebAppReady = true;
-                debug('Telegram WebApp initialized');
-                return true;
-            } catch (error) {
-                debug('Error initializing Telegram WebApp: ' + error.message);
-                return false;
-            }
-        }
-
-        let gameState = {
-            currentScreen: 'main-menu',
-            gameMode: null,
-            guessCount: 0
-        };
-
-        function initApp() {
-            const telegramReady = initTelegramWebApp();
-
-            if (telegramReady) {
-                debug('Running in Telegram');
-                document.getElementById('app-container').classList.remove('hidden');
-                document.getElementById('error-screen').classList.add('hidden');
-                showMainMenu();
-            } else {
-                debug('Running in browser (not Telegram)');
-                document.getElementById('app-container').classList.add('hidden');
-                document.getElementById('error-screen').classList.remove('hidden');
-            }
-        }
-
-        function showScreen(screenId) {
-            document.querySelectorAll('.game-screen').forEach(screen => {
-                screen.classList.remove('active');
-            });
-            const screen = document.getElementById(screenId);
-            if (screen) {
-                screen.classList.add('active');
-            }
-            gameState.currentScreen = screenId;
-
-            updateMainButton(screenId);
-        }
-
-        function updateMainButton(screenId) {
-            if (!tg || !isWebAppReady) return;
-
-            switch (screenId) {
-                case 'main-menu':
-                    tg.MainButton.hide();
-                    break;
-                case 'game-play':
-                    tg.MainButton.text = "Здатися";
-                    tg.MainButton.show();
-                    break;
-                default:
-                    tg.MainButton.text = "Назад";
-                    tg.MainButton.show();
-            }
-        }
-
-        function showMainMenu() {
+    function updateUI(state) {
+        if (!state || state.status === 'not_in_game') {
             showScreen('main-menu');
-            gameState = { currentScreen: 'main-menu', gameMode: null, guessCount: 0 };
-            document.getElementById('guess-history').innerHTML = '';
-            document.getElementById('create-btn').classList.remove('hidden');
+            return;
         }
 
-        function showCreateLobby() {
-            showScreen('create-lobby');
-            document.getElementById('lobby-created').classList.add('hidden');
+        switch(state.status) {
+            case 'waiting_for_player':
+                document.getElementById('lobby-id-display').textContent = state.lobbyId;
+                showScreen('waiting-lobby');
+                break;
+            case 'setting_secret':
+                document.getElementById('secret-status').textContent = state.waitingForOpponentSecret ? 'Очікуємо, поки опонент загадає число...' : 'Загадайте ваше секретне число.';
+                showScreen('set-secret');
+                break;
+            case 'in_game':
+                updateGamePlayUI(state);
+                showScreen('game-play');
+                break;
+            case 'game_over':
+                updateGameResultUI(state);
+                showScreen('game-result');
+                break;
+        }
+    }
+
+    function updateGamePlayUI(state) {
+        const turnIndicator = document.getElementById('turn-indicator');
+        const guessBtn = document.getElementById('guess-btn');
+        const guessInput = document.getElementById('guess-input');
+
+        if (state.isMyTurn) {
+            turnIndicator.textContent = "🎯 Ваш хід!";
+            turnIndicator.className = 'text-center text-lg font-semibold p-3 rounded-xl bg-green-500/20 text-green-300';
+            guessBtn.disabled = false;
+            guessInput.disabled = false;
+        } else {
+            turnIndicator.textContent = "⏳ Хід опонента...";
+            turnIndicator.className = 'text-center text-lg font-semibold p-3 rounded-xl bg-yellow-500/20 text-yellow-300';
+            guessBtn.disabled = true;
+            guessInput.disabled = true;
         }
 
-        function showJoinLobby() {
-            showScreen('join-lobby');
-            document.getElementById('lobby-code').value = '';
+        const historyContainer = document.getElementById('guess-history');
+        historyContainer.innerHTML = '';
+        state.history.forEach(item => {
+            const historyItem = document.createElement('div');
+            historyItem.className = 'p-3 rounded-md';
+            historyItem.style.backgroundColor = 'rgba(0,0,0,0.2)';
+            historyItem.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="text-xl font-mono tracking-widest">${item.guess}</span>
+                    <div class="text-right text-sm">
+                        <p>Збігів: <span class="font-bold">${item.sameDigits}</span></p>
+                        <p>На місці: <span class="font-bold">${item.samePositions}</span></p>
+                    </div>
+                </div>
+            `;
+            historyContainer.appendChild(historyItem);
+        });
+    }
+
+    function updateGameResultUI(state) {
+        document.getElementById('result-title').textContent = state.win ? "🏆 Перемога! 🏆" : "😔 Поразка 😔";
+        document.getElementById('result-description').textContent = state.message;
+        document.getElementById('opponent-secret-number').textContent = state.opponentSecretNumber;
+    }
+
+    function sendData(data) {
+        if (!tg.initData) {
+            showScreen('error-screen');
+            return;
         }
+        console.log("Sending data:", data);
+        tg.sendData(JSON.stringify(data));
+    }
 
-        function sendDataToBot(data) {
-            debug(`Sending data: ${JSON.stringify(data)}`);
+    function requestStateUpdate() {
+        sendData({ action: 'get_game_state' });
+    }
 
-            if (tg && isWebAppReady) {
-                try {
-                    tg.sendData(JSON.stringify(data));
-                    debug('Data sent via Telegram WebApp');
-                } catch (error) {
-                    debug('Error sending data: ' + error.message);
-                    showError('Помилка відправки даних: ' + error.message);
+    function shareInvite() {
+        const lobbyId = document.getElementById('lobby-id-display').textContent;
+        const text = `Привіт! Запрошую тебе зіграти в "Вгадай Число". Приєднуйся до моєї кімнати!`;
+        const url = `https://t.me/${tg.initDataUnsafe.bot.username}/app?startapp=${lobbyId}`;
+        tg.switchInlineQuery(lobbyId, ['users', 'groups']);
+    }
+
+    const createLobby = () => sendData({ action: 'create_lobby' });
+    const startPractice = () => sendData({ action: 'start_practice' });
+    const leaveLobby = () => sendData({ action: 'leave_lobby' });
+    const surrenderGame = () => tg.showConfirm("Ви впевнені, що хочете здатися?", (ok) => ok && sendData({ action: 'surrender' }));
+
+    function joinLobby() {
+        const lobbyId = document.getElementById('lobby-code-input').value.trim();
+        if (!lobbyId) {
+            tg.showAlert("Будь ласка, введіть код кімнати.");
+            return;
+        }
+        sendData({ action: 'join_lobby', lobbyId });
+    }
+
+    function setSecretNumber() {
+        const number = document.getElementById('secret-number-input').value;
+        if (!/^[1-9][0-9]{3}$/.test(number) || new Set(number).size !== 4) {
+            tg.showAlert('Число має містити 4 унікальні цифри і не починатись з 0.');
+            return;
+        }
+        sendData({ action: 'set_secret', secretNumber: number });
+        document.getElementById('secret-status').textContent = 'Число відправлено. Очікуємо на опонента...';
+    }
+
+    function makeGuess() {
+        const guess = document.getElementById('guess-input').value;
+        if (!/^[1-9][0-9]{3}$/.test(guess) || new Set(guess).size !== 4) {
+            tg.showAlert('Введіть 4 унікальні цифри, що не починаються з 0.');
+            return;
+        }
+        sendData({ action: 'make_guess', guess });
+        document.getElementById('guess-input').value = '';
+    }
+
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!tg.initData) {
+            showScreen('error-screen');
+            return;
+        }
+        
+        tg.ready();
+        tg.expand();
+        tg.setHeaderColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-secondary-bg').trim());
+        tg.setBackgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-bg').trim());
+
+        tg.onEvent('web_app_data_received', (data) => {
+            try {
+                if(data && data.data) {
+                    const state = JSON.parse(data.data);
+                    console.log("Received state:", state);
+                    updateUI(state);
                 }
-            } else {
-                debug('Telegram WebApp not available. Cannot send data.');
-                showError('Неможливо відправити дані. Переконайтесь, що гра запущена через Telegram.');
-            }
-        }
-
-        function createLobby() {
-            debug('Creating lobby...');
-            sendDataToBot({ action: 'create_lobby' });
-
-            document.getElementById('lobby-id').innerHTML = "Створюємо кімнату...";
-            document.getElementById('lobby-created').classList.remove('hidden');
-            document.getElementById('create-btn').classList.add('hidden');
-        }
-
-        function joinLobby() {
-            const code = document.getElementById('lobby-code').value.trim();
-            if (!code) {
-                showError('Будь ласка, введіть код кімнати.');
-                return;
-            }
-            debug(`Joining lobby: ${code}`);
-            sendDataToBot({ action: 'join_lobby', lobbyId: code });
-            gameState.gameMode = 'online';
-            showScreen('set-secret');
-        }
-
-        function startPractice() {
-            debug('Starting practice...');
-            sendDataToBot({ action: 'start_practice' });
-            gameState.gameMode = 'practice';
-            showScreen('game-play');
-            document.getElementById('game-status').textContent = 'Тренування з ботом';
-            document.getElementById('turn-indicator').textContent = 'Вгадайте число, яке загадав бот.';
-        }
-
-        function setSecretNumber() {
-            const number = document.getElementById('secret-number').value;
-            if (!validateSecretNumber(number)) {
-                showError('Неправильне число! Число повинно складатись з 4 унікальних цифр і не починатись з 0.');
-                return;
-            }
-            debug(`Setting secret number: ${number}`);
-            sendDataToBot({ action: 'set_secret', secretNumber: number });
-            showScreen('game-play');
-            document.getElementById('game-status').textContent = 'Гра почалася!';
-            document.getElementById('turn-indicator').textContent = 'Слідкуйте за повідомленнями від бота, щоб знати, коли ваш хід.';
-        }
-
-        function makeGuess() {
-            const guess = document.getElementById('guess-input').value;
-            if (!validateSecretNumber(guess)) {
-                showError('Неправильне число! Введіть 4 унікальні цифри, що не починаються з 0.');
-                return;
-            }
-
-            debug(`Making guess: ${guess}`);
-            sendDataToBot({ action: 'make_guess', guess: guess });
-
-            gameState.guessCount++;
-            const historyContainer = document.getElementById('guess-history');
-            const guessItem = document.createElement('div');
-            guessItem.className = 'guess-item';
-            guessItem.innerHTML = `<div class="guess-number">Спроба #${gameState.guessCount}: ${guess}</div><div class="guess-result">Результат дивіться в чаті з ботом.</div>`;
-            historyContainer.appendChild(guessItem);
-            historyContainer.scrollTop = historyContainer.scrollHeight;
-
-            document.getElementById('guess-input').value = '';
-            showNotification("Ваш хід відправлено. Перевірте чат з ботом, щоб побачити результат і дізнатись, чий хід наступний.");
-        }
-
-        function surrenderGame() {
-            const confirmAction = () => {
-                debug('Surrendering game...');
-                sendDataToBot({ action: 'surrender' });
-                showGameResult(false, gameState.guessCount, true);
-            };
-
-            if (tg && isWebAppReady) {
-                tg.showConfirm('Ви впевнені, що хочете здатися?', confirmAction);
-            } else {
-                if (confirm('Ви впевнені, що хочете здатися?')) {
-                    confirmAction();
-                }
-            }
-        }
-
-        function leaveLobby() {
-            const confirmAction = () => {
-                debug('Leaving lobby...');
-                sendDataToBot({ action: 'leave_lobby' });
-                showMainMenu();
-            };
-
-            if (tg && isWebAppReady) {
-                tg.showConfirm('Ви впевнені, що хочете покинути кімнату?', confirmAction);
-            } else {
-                if (confirm('Ви впевнені, що хочете покинути кімнату?')) {
-                    confirmAction();
-                }
-            }
-        }
-
-        function validateSecretNumber(number) {
-            if (!number || number.length !== 4) return false;
-            if (number[0] === '0') return false;
-            if (!/^\d{4}$/.test(number)) return false;
-            const digits = new Set(number.split(''));
-            return digits.size === 4;
-        }
-
-        function showGameResult(won, attempts, surrendered = false) {
-            const title = document.getElementById('result-title');
-            const description = document.getElementById('result-description');
-            const stats = document.getElementById('game-stats');
-
-            if (surrendered) {
-                title.textContent = '🏳️ Ви здалися';
-                description.textContent = 'Не засмучуйтесь, спробуйте ще раз!';
-            } else {
-                title.textContent = '🏁 Гра завершена';
-                description.textContent = 'Результат гри дивіться в чаті з ботом.';
-            }
-            stats.textContent = `Кількість ваших ходів: ${attempts}`;
-            showScreen('game-result');
-        }
-
-        function showError(message) {
-            debug(`Error: ${message}`);
-            if (tg && isWebAppReady) {
-                tg.showAlert(message);
-            } else {
-                alert(message);
-            }
-        }
-
-        function showNotification(message) {
-            debug(`Notification: ${message}`);
-            if (tg && isWebAppReady) {
-                tg.showAlert(message);
-            } else {
-                alert(message);
-            }
-        }
-
-        document.addEventListener('input', function (e) {
-            if (e.target.classList.contains('number-input')) {
-                if (e.target.id === 'lobby-code') {
-                } else {
-                    e.target.value = e.target.value.replace(/\D/g, '');
-                }
+            } catch(e) {
+                console.error("Failed to parse event data", e);
+                tg.showAlert("Помилка оновлення даних гри.");
             }
         });
 
-        document.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                switch (gameState.currentScreen) {
-                    case 'join-lobby': joinLobby(); break;
-                    case 'set-secret': setSecretNumber(); break;
-                    case 'game-play': makeGuess(); break;
-                }
+        tg.onEvent('viewportChanged', (event) => {
+            if (!event.isStateStable) {
+                return;
             }
+            requestStateUpdate();
         });
 
-        if (tg) {
-            tg.onEvent('viewportChanged', () => {
-                debug('Viewport changed');
-                tg.expand();
-            });
+        const startParam = tg.initDataUnsafe.start_param;
+        if (startParam) {
+            sendData({ action: 'join_lobby', lobbyId: startParam });
+        } else {
+            requestStateUpdate();
         }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            initApp();
-        });
-    </script>
+    });
+</script>
 </body>
-
 </html>

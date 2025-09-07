@@ -129,13 +129,18 @@
     };
 
     function showScreen(screenId) {
-        if (!tg) return;
+        if (!tg) {
+            Object.values(screens).forEach(s => s.classList.remove('active'));
+            screens.error.classList.add('active');
+            return;
+        }
         Object.values(screens).forEach(s => s.classList.remove('active'));
-        const screenElement = Object.values(screens).find(s => s.id === screenId);
-        if (screenElement) {
-            screenElement.classList.add('active');
+        const screenKey = Object.keys(screens).find(key => screens[key].id === screenId);
+        if (screens[screenKey]) {
+            screens[screenKey].classList.add('active');
         } else {
             console.error(`Screen with id ${screenId} not found.`);
+            screens.mainMenu.classList.add('active');
         }
         tg.HapticFeedback.impactOccurred('light');
     }
@@ -163,6 +168,8 @@
                 updateGameResultUI(state);
                 showScreen('game-result');
                 break;
+            default:
+                showScreen('main-menu');
         }
     }
 
@@ -186,7 +193,7 @@
         const historyContainer = document.getElementById('guess-history');
         historyContainer.innerHTML = '';
         if (state.history && Array.isArray(state.history)) {
-            state.history.forEach(item => {
+            state.history.slice().reverse().forEach(item => {
                 const historyItem = document.createElement('div');
                 historyItem.className = 'p-3 rounded-md';
                 historyItem.style.backgroundColor = 'rgba(0,0,0,0.2)';
@@ -213,6 +220,7 @@
     function sendData(data) {
         try {
             if (!tg || !tg.initData) {
+                console.error("Telegram WebApp is not initialized.");
                 showScreen('error-screen');
                 return;
             }
@@ -253,7 +261,7 @@
 
     function setSecretNumber() {
         const number = document.getElementById('secret-number-input').value;
-        if (!/^[1-9][0-9]{3}$/.test(number) || new Set(number).size !== 4) {
+        if (!/^[1-9]\d{3}$/.test(number) || new Set(number).size !== 4) {
             tg.showAlert('Число має містити 4 унікальні цифри і не починатись з 0.');
             return;
         }
@@ -263,7 +271,7 @@
 
     function makeGuess() {
         const guess = document.getElementById('guess-input').value;
-        if (!/^[1-9][0-9]{3}$/.test(guess) || new Set(guess).size !== 4) {
+        if (!/^[1-9]\d{3}$/.test(guess) || new Set(guess).size !== 4) {
             tg.showAlert('Введіть 4 унікальні цифри, що не починаються з 0.');
             return;
         }
@@ -282,15 +290,16 @@
             tg.expand();
             tg.setHeaderColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-secondary-bg').trim());
             tg.setBackgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-bg').trim());
-
+            
             tg.onEvent('web_app_data_received', (data) => {
-                if(data && data.data) {
+                if (data && data.description) { 
                     try {
-                        const state = JSON.parse(data.data);
+                        const state = JSON.parse(data.description);
                         console.log("Received state:", state);
                         updateUI(state);
                     } catch (e) {
-                        console.error("Failed to parse state data:", e);
+                        console.error("Failed to parse state data from description:", e);
+                        tg.showAlert('Помилка оновлення даних від сервера.');
                     }
                 }
             });
@@ -305,7 +314,7 @@
             if (startParam) {
                 showScreen('join-lobby');
                 document.getElementById('lobby-code-input').value = startParam;
-                sendData({ action: 'join_lobby', lobbyId: startParam });
+                joinLobby();
             } else {
                 requestStateUpdate();
             }
@@ -321,4 +330,3 @@
 </script>
 </body>
 </html>
-

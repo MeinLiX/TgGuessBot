@@ -231,21 +231,18 @@ class GameService {
       if (!lobby) {
         return { success: false, message: 'Game not found' };
       }
+      
+      const opponent = lobby.getOpponent(userId);
+      const secretNumber = opponent ? opponent.secretNumber : '';
 
-      let secretNumber = '';
-      if (lobby.settings.isComputer) {
-        const computerPlayer = lobby.players.find(p => p.id === 0);
-        secretNumber = computerPlayer ? computerPlayer.secretNumber : '';
-      } else {
-        const opponent = lobby.getOpponent(userId);
-        secretNumber = opponent ? opponent.secretNumber : '';
-      }
-
-      this.endGame(lobby.id);
+      lobby.gameEnded = true;
+      lobby.winnerId = opponent ? opponent.id : null;
+      lobby.endGameMessage = `You surrendered. \nSecret number enemy: ${secretNumber}`;
 
       return {
         success: true,
-        message: MESSAGES.SURRENDER(secretNumber)
+        message: MESSAGES.SURRENDER(secretNumber),
+        lobby: lobby,
       };
     } catch (error) {
       logger.error('Error surrendering game:', error);

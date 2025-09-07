@@ -6,7 +6,6 @@ const {
   USER_STATES,
   MESSAGES,
   CALLBACK_DATA,
-  KEYBOARD_LABELS
 } = require('../constants');
 
 class BotHandlers {
@@ -23,9 +22,11 @@ class BotHandlers {
       const message = ctx.message.text;
       const user = this.gameService.userService.getOrCreateUser(userId, ctx.from.first_name);
 
-      if (message.length > 36 && user.isAvailable()) {
-        const lobbyId = message.slice(7);
-        return await this.handleJoinByLink(ctx, userId, lobbyId);
+      if (message.includes('start=') && message.length > 7 && user.isAvailable()) {
+        const lobbyId = message.split('start=')[1];
+        if (lobbyId) {
+          return await this.handleJoinByLink(ctx, userId, lobbyId);
+        }
       }
 
       if (user.isAvailable()) {
@@ -131,7 +132,6 @@ class BotHandlers {
 
     if (result.success && result.opponentId) {
       try {
-        const opponent = this.gameService.userService.getUser(result.opponentId);
         await ctx.telegram.sendMessage(result.opponentId, 'Ваш опонент покинув лобі.', {
           reply_markup: KeyboardService.getMainMenuKeyboard()
         });
@@ -271,6 +271,15 @@ class BotHandlers {
             await ctx.reply(result.message, {
               reply_markup: KeyboardService.getGoToMenuKeyboard()
             });
+            if (result.lobby) {
+                const opponent = result.lobby.getOpponent(userId);
+                if (opponent && opponent.id !== 0) {
+                    await ctx.telegram.sendMessage(opponent.id, "Опонент здався. Ви перемогли!", {
+                         reply_markup: KeyboardService.getGoToMenuKeyboard()
+                    });
+                }
+                this.gameService.endGame(result.lobby.id);
+            }
           }
         }
         break;
@@ -320,11 +329,11 @@ class BotHandlers {
         const players = lobby.players.filter(p => p.id !== 0);
         for (let i = 0; i < players.length; i++) {
           const player = players[i];
-          const isFirstPlayer = i === 0;
+          const isMyTurn = lobby.isPlayerTurn(player.id);
 
           await ctx.telegram.sendMessage(
             player.id,
-            isFirstPlayer ? MESSAGES.GAME_START : MESSAGES.ENEMY_MOVE
+            isMyTurn ? MESSAGES.GAME_START : MESSAGES.ENEMY_MOVE
           );
         }
       }
@@ -432,34 +441,25 @@ class BotHandlers {
     try {
       const query = ctx.inlineQuery.query;
       const userId = ctx.from.id;
+      
       const user = this.gameService.userService.getUser(userId);
-
-      if (query === 'invite' && user && user.isAvailable()) {
-        const result = this.gameService.createOnlineLobby(userId);
-
-        if (result.success) {
-          return await ctx.answerInlineQuery([
+      if (user && user.isInLobby() && query === user.lobbyId) {
+           return await ctx.answerInlineQuery([
             {
               type: 'article',
               id: ctx.inlineQuery.id,
-              title: 'Create and invite to the lobby',
-              description: 'Invite a friend to play against each other.',
+              title: 'Поділитися запрошенням у гру',
+              description: 'Натисніть, щоб надіслати запрошення другу.',
               input_message_content: {
                 message_text: MESSAGES.INVITE_TO_GAME
               },
-              reply_markup: KeyboardService.getAcceptInviteKeyboard(result.lobby.id)
+              reply_markup: KeyboardService.getAcceptInviteKeyboard(user.lobbyId)
             }
-          ], {
-            cache_time: 0,
-            is_personal: true
-          });
-        }
+          ], { cache_time: 0, is_personal: true });
       }
-
-      await ctx.answerInlineQuery();
     } catch (error) {
       logger.error('Error in handleInlineQuery:', error);
-      await ctx.answerInlineQuery();
+      await ctx.answerInlineQuery([]);
     }
   }
 
@@ -482,13 +482,12 @@ class BotHandlers {
    */
   async handleError(err, ctx) {
     const userId = ctx?.message?.chat?.id || ctx?.from?.id;
+    logger.error('Bot error:', { error: err.message, stack: err.stack, context: ctx.update });
 
     if (userId) {
-      await ctx.reply(MESSAGES.ERROR_START);
+      await ctx.reply(MESSAGES.ERROR_START).catch(e => logger.error("Failed to send error message to user", e));
       this.gameService.userService.resetUser(userId);
     }
-
-    logger.error('Bot error:', err);
   }
 
   /**
@@ -498,8 +497,8 @@ class BotHandlers {
     setInterval(() => {
       try {
         const cleaned = this.gameService.cleanupOldGames();
-        if (cleaned > 0) {
-          logger.info(`Cleanup job completed: ${cleaned} old lobbies removed`);
+        if (cleaned.totalCleaned > 0) {
+          logger.info(`Cleanup job completed: ${cleaned.totalCleaned} old lobbies removed`);
         }
       } catch (error) {
         logger.error('Error in cleanup job:', error);
@@ -509,57 +508,77 @@ class BotHandlers {
 
   async handleWebAppData(ctx) {
     try {
-      const data = JSON.parse(ctx.message.web_app_data.data);
-      const userId = ctx.from.id;
-      this.gameService.userService.getOrCreateUser(userId, ctx.from.first_name);
+      const rawData = ctx.update.message?.web_app_data?.data;
+      if (!rawData) {
+        logger.warn('Received Web App update without data');
+        return;
+      }
 
+      let data;
+      if (typeof rawData === 'string') {
+        try {
+          data = JSON.parse(rawData);
+        } catch (e) {
+          logger.error('Error parsing web_app_data JSON', { error: e.message, rawData });
+          return;
+        }
+      } else {
+        data = rawData;
+      }
+
+      const userId = ctx.from.id;
+      const queryId = ctx.webAppData?.queryId;
+
+      const user = this.gameService.userService.getOrCreateUser(userId, ctx.from.first_name);
+      if (queryId) {
+        user.lastWebAppQueryId = queryId;
+      }
+      
       logger.info(`WebApp action from ${userId}: ${data.action}`);
 
       switch (data.action) {
+        case 'get_game_state':
+          break;
         case 'create_lobby':
           this.gameService.createOnlineLobby(userId);
           break;
         case 'join_lobby':
-          this.handleWebAppJoinLobby(ctx, userId, data.lobbyId);
+          await this.handleWebAppJoinLobby(ctx, userId, data.lobbyId);
           break;
         case 'start_practice':
           this.gameService.createPracticeGame(userId);
           break;
         case 'set_secret':
-          this.handleWebAppSetSecret(ctx, userId, data.secretNumber);
+          await this.handleWebAppSetSecret(ctx, userId, data.secretNumber);
           break;
         case 'make_guess':
-          this.handleWebAppMakeGuess(ctx, userId, data.guess);
+          await this.handleWebAppMakeGuess(ctx, userId, data.guess);
           break;
         case 'surrender':
-          this.handleWebAppSurrender(ctx, userId);
+          await this.handleWebAppSurrender(ctx, userId);
           break;
         case 'leave_lobby':
-          this.gameService.leaveLobby(userId);
+          const leaveResult = this.gameService.leaveLobby(userId);
+          if (leaveResult.success && leaveResult.opponentId) {
+              await this.sendGameStateToUser(ctx, leaveResult.opponentId);
+          }
           break;
       }
 
-      await this.sendCurrentGameState(ctx, userId);
+      await this.sendCurrentGameState(ctx, userId, queryId);
 
     } catch (error) {
-      logger.error('Error handling Web App data:', error);
-      await ctx.answerWebAppQuery({
-        type: 'article',
-        id: `error_${Date.now()}`,
-        title: 'Помилка сервера',
-        input_message_content: { message_text: 'Сталася помилка під час обробки вашого запиту.' },
-      });
+      logger.error('Error handling Web App data:', { message: error.message, stack: error.stack });
     }
   }
 
   async handleWebAppJoinLobby(ctx, userId, lobbyId) {
     const result = this.gameService.joinLobby(userId, lobbyId);
-    if (result.success) {
-      const opponentId = result.lobby.players.find(p => p.id !== userId)?.id;
-      if (opponentId) {
-        await this.sendGameStateToUser(ctx, opponentId);
-        await ctx.telegram.sendMessage(opponentId, `👤 Гравець ${ctx.from.first_name} приєднався до вашої гри!`);
-      }
+    if (result.success && result.isLobbyFull) {
+        const opponentId = result.lobby.players.find(p => p.id !== userId)?.id;
+        if (opponentId && opponentId !== 0) {
+            await this.sendGameStateToUser(ctx, opponentId);
+        }
     }
   }
 
@@ -570,7 +589,6 @@ class BotHandlers {
       for (const player of lobby.players) {
         if (player.id !== 0) {
           await this.sendGameStateToUser(ctx, player.id);
-          await ctx.telegram.sendMessage(player.id, "🎮 Гра почалася! Обидва гравці загадали числа.");
         }
       }
     }
@@ -593,30 +611,25 @@ class BotHandlers {
   }
 
   async handleWebAppSurrender(ctx, userId) {
-    const lobby = this.gameService.lobbyService.getUserLobby(userId);
     const result = this.gameService.surrenderGame(userId);
-    if (result.success && lobby) {
-      await this.notifyGameEnd(ctx, lobby, lobby.getOpponent(userId)?.id, true);
+    if (result.success && result.lobby) {
+      const opponentId = result.lobby.getOpponent(userId)?.id;
+      await this.notifyGameEnd(ctx, result.lobby, opponentId, true);
     }
   }
-
 
   async notifyGameEnd(ctx, lobby, winnerId, wasSurrender = false) {
     for (const player of lobby.players) {
       if (player.id !== 0) {
-        const message = player.id === winnerId
-          ? (wasSurrender ? "Опонент здався. Ви перемогли!" : "Вітаємо з перемогою!")
-          : "Ви програли. Спробуйте ще раз!";
-        await ctx.telegram.sendMessage(player.id, message);
         await this.sendGameStateToUser(ctx, player.id);
       }
     }
     this.gameService.endGame(lobby.id);
   }
 
-  async sendCurrentGameState(ctx, userId) {
+  async sendCurrentGameState(ctx, userId, queryId) {
     const gameState = this.getGameStateForUser(userId);
-    await ctx.answerWebAppQuery({
+    const result = {
       type: 'article',
       id: `state_${userId}_${Date.now()}`,
       title: 'Game State',
@@ -624,23 +637,32 @@ class BotHandlers {
         message_text: `[WebApp] Оновлено стан гри: ${gameState.status}`
       },
       description: JSON.stringify(gameState)
-    }).catch(err => logger.error(`Failed to answerWebAppQuery for ${userId}:`, err));
+    };
+
+    if (queryId) {
+      await ctx.telegram.answerWebAppQuery(queryId, result)
+        .catch(err => logger.error(`Failed to answerWebAppQuery for ${userId}:`, err.message));
+    }
   }
 
   async sendGameStateToUser(ctx, userId) {
     const user = this.gameService.userService.getUser(userId);
-    if (!user) return;
+    if (!user || !user.lastWebAppQueryId) {
+        logger.warn(`Could not push state to user ${userId}, no active queryId.`);
+        return;
+    };
+    
     const gameState = this.getGameStateForUser(userId);
-    await ctx.telegram.callApi('answerWebAppQuery', {
-      web_app_query_id: user.lastWebAppQueryId,
-      result: {
+    const result = {
         type: 'article',
         id: `state_${userId}_${Date.now()}`,
         title: 'Game State Update',
         input_message_content: { message_text: `[WebApp] Стан гри оновлено: ${gameState.status}` },
         description: JSON.stringify(gameState)
-      }
-    }).catch(err => logger.warn(`Could not push state to user ${userId}, probably no active query.`));
+    };
+
+    await ctx.telegram.answerWebAppQuery(user.lastWebAppQueryId, result)
+      .catch(err => logger.warn(`Could not push state to user ${userId}, probably query expired.`, { error: err.message }));
   }
 
 
@@ -660,19 +682,24 @@ class BotHandlers {
     const opponent = lobby.getOpponent(userId);
 
     if (lobby.gameEnded) {
+      const isWinner = lobby.winnerId === userId;
       return {
         status: 'game_over',
-        win: lobby.winnerId === userId,
-        message: lobby.endGameMessage || (lobby.winnerId === userId ? "Ви перемогли!" : "Ви програли."),
-        opponentSecretNumber: opponent.secretNumber
+        win: isWinner,
+        message: isWinner ? "Ви перемогли!" : "Ви програли.",
+        opponentSecretNumber: opponent?.secretNumber || '????'
       };
     }
 
     if (!lobby.gameStarted) {
-      if (lobby.players.length < 2) {
+      if (!lobby.isFull()) {
         return { status: 'waiting_for_player', lobbyId: lobby.id };
       } else {
-        return { status: 'setting_secret', waitingForOpponentSecret: opponent && !opponent.hasSecretNumber() };
+        const isWaitingForOpponent = opponent && !opponent.hasSecretNumber();
+        return { 
+            status: 'setting_secret', 
+            waitingForOpponentSecret: player.hasSecretNumber() && isWaitingForOpponent 
+        };
       }
     }
 
@@ -682,7 +709,6 @@ class BotHandlers {
       history: player.guessHistory || []
     };
   }
-
 }
 
 module.exports = BotHandlers;

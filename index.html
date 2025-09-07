@@ -115,7 +115,7 @@
     </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
 
     const screens = {
         loading: document.getElementById('loading-screen'),
@@ -129,6 +129,7 @@
     };
 
     function showScreen(screenId) {
+        if (!tg) return;
         Object.values(screens).forEach(s => s.classList.remove('active'));
         const screenElement = Object.values(screens).find(s => s.id === screenId);
         if (screenElement) {
@@ -211,15 +212,14 @@
 
     function sendData(data) {
         try {
-            if (!tg.initData) {
+            if (!tg || !tg.initData) {
                 showScreen('error-screen');
                 return;
             }
             console.log("Sending data:", data);
             tg.sendData(JSON.stringify(data));
         } catch (e) {
-            console.error("Error sending data or accessing Telegram properties:", e);
-            showScreen('error-screen');
+            console.error("Error sending data:", e);
         }
     }
 
@@ -271,51 +271,53 @@
         document.getElementById('guess-input').value = '';
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        try {
-             if (!tg || !tg.initData) {
-                showScreen('error-screen');
-                return;
-            }
+    function initializeApp() {
+        if (!tg || !tg.initData) {
+            showScreen('error-screen');
+            return;
+        }
 
+        try {
             tg.ready();
             tg.expand();
             tg.setHeaderColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-secondary-bg').trim());
             tg.setBackgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--tg-bg').trim());
 
             tg.onEvent('web_app_data_received', (data) => {
-                try {
-                    if(data && data.data) {
+                if(data && data.data) {
+                    try {
                         const state = JSON.parse(data.data);
                         console.log("Received state:", state);
                         updateUI(state);
+                    } catch (e) {
+                        console.error("Failed to parse state data:", e);
                     }
-                } catch(e) {
-                    console.error("Failed to parse event data", e);
-                    tg.showAlert("Помилка оновлення даних гри.");
                 }
             });
 
             tg.onEvent('viewportChanged', (event) => {
-                if (!event.isStateStable) {
-                    return;
+                if (event.isStateStable) {
+                    requestStateUpdate();
                 }
-                requestStateUpdate();
             });
-
+            
             const startParam = tg.initDataUnsafe.start_param;
             if (startParam) {
-                document.getElementById('lobby-code-input').value = startParam;
                 showScreen('join-lobby');
+                document.getElementById('lobby-code-input').value = startParam;
                 sendData({ action: 'join_lobby', lobbyId: startParam });
             } else {
                 requestStateUpdate();
             }
+
         } catch (e) {
             console.error("Initialization failed:", e);
             showScreen('error-screen');
         }
-    });
+    }
+    
+    window.addEventListener('DOMContentLoaded', initializeApp);
+
 </script>
 </body>
 </html>

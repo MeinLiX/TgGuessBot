@@ -527,12 +527,12 @@ class BotHandlers {
       }
 
       const userId = ctx.from.id;
-      const queryId = ctx.webAppData?.queryId;
+      //const queryId = ctx.webAppData?.queryId;
 
-      const user = this.gameService.userService.getOrCreateUser(userId, ctx.from.first_name);
-      if (queryId) {
-        user.lastWebAppQueryId = queryId;
-      }
+      //const user = this.gameService.userService.getOrCreateUser(userId, ctx.from.first_name);
+      //if (queryId) {
+      //  user.lastWebAppQueryId = queryId;
+      //}
       
       logger.info(`WebApp action from ${userId}: ${data.action}`);
 
@@ -565,7 +565,7 @@ class BotHandlers {
           break;
       }
 
-      await this.sendCurrentGameState(ctx, userId, queryId);
+      await this.sendCurrentGameState(ctx, userId);
 
     } catch (error) {
       logger.error('Error handling Web App data:', { message: error.message, stack: error.stack });
@@ -627,23 +627,15 @@ class BotHandlers {
     this.gameService.endGame(lobby.id);
   }
 
-  async sendCurrentGameState(ctx, userId, queryId) {
+  async sendCurrentGameState(ctx, userId) {
     const gameState = this.getGameStateForUser(userId);
-    const result = {
-      type: 'article',
-      id: `state_${userId}_${Date.now()}`,
-      title: 'Game State',
-      input_message_content: {
-        message_text: `[WebApp] Оновлено стан гри: ${gameState.status}`
-      },
-      description: JSON.stringify(gameState)
-    };
 
-    if (queryId) {
-      await ctx.telegram.answerWebAppQuery(queryId, result)
-        .catch(err => logger.error(`Failed to answerWebAppQuery for ${userId}:`, err.message));
+    try {
+        await ctx.telegram.sendMessage(userId, JSON.stringify(gameState));
+    } catch (err) {
+        logger.error(`Failed to send game state to ${userId}:`, err.message);
     }
-  }
+}
 
   async sendGameStateToUser(ctx, userId) {
     const user = this.gameService.userService.getUser(userId);

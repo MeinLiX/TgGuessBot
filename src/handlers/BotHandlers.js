@@ -2,10 +2,11 @@ const GameService = require('../services/GameService');
 const KeyboardService = require('../services/KeyboardService');
 const logger = require('../utils/logger');
 const config = require('../config');
-const {
-  USER_STATES,
-  MESSAGES,
+const { 
+  USER_STATES, 
+  MESSAGES, 
   CALLBACK_DATA,
+  KEYBOARD_LABELS 
 } = require('../constants');
 
 class BotHandlers {
@@ -22,11 +23,9 @@ class BotHandlers {
       const message = ctx.message.text;
       const user = this.gameService.userService.getOrCreateUser(userId, ctx.from.first_name);
 
-      if (message.includes('start=') && message.length > 7 && user.isAvailable()) {
-        const lobbyId = message.split('start=')[1];
-        if (lobbyId) {
-          return await this.handleJoinByLink(ctx, userId, lobbyId);
-        }
+      if (message.length > 36 && user.isAvailable()) {
+        const lobbyId = message.slice(7);
+        return await this.handleJoinByLink(ctx, userId, lobbyId);
       }
 
       if (user.isAvailable()) {
@@ -46,10 +45,10 @@ class BotHandlers {
   async handleJoinByLink(ctx, userId, lobbyId) {
     try {
       const result = this.gameService.joinLobby(userId, lobbyId);
-
+      
       if (result.success) {
         const lobby = result.lobby;
-
+        
         if (lobby.isFull()) {
           for (const player of lobby.players) {
             if (player.id !== 0) {
@@ -82,7 +81,7 @@ class BotHandlers {
         await ctx.answerCbQuery();
         return;
       }
-
+      
       if (!user.isAvailable()) {
         await ctx.answerCbQuery();
         return;
@@ -123,7 +122,7 @@ class BotHandlers {
     const result = this.gameService.leaveLobby(userId);
 
     await ctx.editMessageText(result.message);
-
+    
     if (result.success) {
       await ctx.reply(MESSAGES.CHOOSE_BUTTON(this.gameService.userService.getUser(userId)?.nickname || 'Гравець'), {
         reply_markup: KeyboardService.getMainMenuKeyboard()
@@ -132,8 +131,9 @@ class BotHandlers {
 
     if (result.success && result.opponentId) {
       try {
+        const opponent = this.gameService.userService.getUser(result.opponentId);
         await ctx.telegram.sendMessage(result.opponentId, 'Ваш опонент покинув лобі.', {
-          reply_markup: KeyboardService.getMainMenuKeyboard()
+            reply_markup: KeyboardService.getMainMenuKeyboard()
         });
       } catch (error) {
         logger.error(`Не вдалося сповістити опонента ${result.opponentId}`, error);
@@ -153,9 +153,9 @@ class BotHandlers {
   /**
    * Handle invite callback
    */
-  async handleInviteCallback(ctx, userId) {
+   async handleInviteCallback(ctx, userId) {
     const result = this.gameService.createOnlineLobby(userId);
-
+    
     if (result.success) {
       await ctx.reply(MESSAGES.INVITE_TO_GAME, {
         reply_markup: KeyboardService.getInviteKeyboard(result.lobby.id)
@@ -191,9 +191,9 @@ class BotHandlers {
    */
   async handleStartPracticeCallback(ctx, userId) {
     await ctx.editMessageText(MESSAGES.COMPUTER_CALCULATING);
-
+    
     const result = this.gameService.createPracticeGame(userId);
-
+    
     if (result.success) {
       await ctx.editMessageText(MESSAGES.COMPUTER_PICKED);
       await ctx.reply(result.message);
@@ -271,15 +271,6 @@ class BotHandlers {
             await ctx.reply(result.message, {
               reply_markup: KeyboardService.getGoToMenuKeyboard()
             });
-            if (result.lobby) {
-                const opponent = result.lobby.getOpponent(userId);
-                if (opponent && opponent.id !== 0) {
-                    await ctx.telegram.sendMessage(opponent.id, "Опонент здався. Ви перемогли!", {
-                         reply_markup: KeyboardService.getGoToMenuKeyboard()
-                    });
-                }
-                this.gameService.endGame(result.lobby.id);
-            }
           }
         }
         break;
@@ -307,7 +298,7 @@ class BotHandlers {
   async handleNameChange(ctx, userId, newName) {
     this.gameService.userService.updateUserNickname(userId, newName);
     this.gameService.userService.updateUserState(userId, USER_STATES.DEFAULT);
-
+    
     await ctx.reply(MESSAGES.NICKNAME_CHANGED(newName), {
       reply_markup: KeyboardService.getGoToMenuKeyboard()
     });
@@ -318,22 +309,22 @@ class BotHandlers {
    */
   async handleSecretNumberSetting(ctx, userId, secretNumber) {
     const result = this.gameService.setSecretNumber(userId, secretNumber);
-
+    
     if (result.success) {
       await ctx.reply(result.message);
-
+      
       if (result.gameReady) {
         const user = this.gameService.userService.getUser(userId);
         const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
-
+        
         const players = lobby.players.filter(p => p.id !== 0);
         for (let i = 0; i < players.length; i++) {
           const player = players[i];
-          const isMyTurn = lobby.isPlayerTurn(player.id);
-
+          const isFirstPlayer = i === 0;
+          
           await ctx.telegram.sendMessage(
-            player.id,
-            isMyTurn ? MESSAGES.GAME_START : MESSAGES.ENEMY_MOVE
+            player.id, 
+            isFirstPlayer ? MESSAGES.GAME_START : MESSAGES.ENEMY_MOVE
           );
         }
       }
@@ -345,9 +336,9 @@ class BotHandlers {
   /**
    * Handle practice mode guess
    */
-  async handlePracticeGuess(ctx, userId, guess) {
+async handlePracticeGuess(ctx, userId, guess) {
     const result = this.gameService.processGuess(userId, guess);
-
+    
     if (result.success) {
       if (result.gameEnded) {
         await ctx.reply(result.message, {
@@ -355,7 +346,7 @@ class BotHandlers {
         });
         const user = this.gameService.userService.getUser(userId);
         if (user && user.lobbyId) {
-          this.gameService.endGame(user.lobbyId);
+            this.gameService.endGame(user.lobbyId);
         }
       } else {
         await ctx.reply(result.message);
@@ -370,23 +361,23 @@ class BotHandlers {
    */
   async handleOnlineGuess(ctx, userId, guess) {
     const result = this.gameService.processGuess(userId, guess);
-
+    
     if (result.success) {
       const user = this.gameService.userService.getUser(userId);
       const lobby = this.gameService.lobbyService.getLobby(user.lobbyId);
-
+      
       if (!lobby) {
         await ctx.reply(result.message || 'Помилка: гру не знайдено.');
         return;
       }
 
       const opponent = lobby.getOpponent(userId);
-
+      
       if (result.gameEnded) {
         await ctx.reply(result.message, {
           reply_markup: KeyboardService.getGoToMenuKeyboard()
         });
-
+        
         if (opponent && result.opponent) {
           await ctx.telegram.sendMessage(opponent.id, result.opponent, {
             reply_markup: KeyboardService.getGoToMenuKeyboard()
@@ -395,7 +386,7 @@ class BotHandlers {
         this.gameService.endGame(user.lobbyId);
       } else {
         await ctx.reply(result.message);
-
+        
         if (opponent && result.opponent) {
           await ctx.telegram.sendMessage(opponent.id, result.opponent);
         }
@@ -412,7 +403,7 @@ class BotHandlers {
     if (message.length > 5 && userId !== config.bot.adminId) {
       const userMessage = message.slice(5).trim();
       await ctx.telegram.sendMessage(
-        config.bot.adminId,
+        config.bot.adminId, 
         `${userMessage}\n\nUser (id): ${userId}`
       );
       await ctx.reply(MESSAGES.THANKS_FOR_CONTACT(userMessage));
@@ -420,7 +411,7 @@ class BotHandlers {
       const parts = message.slice(6).split(' ');
       const targetUserId = parts[0];
       const response = parts.slice(1).join(' ');
-
+      
       try {
         await ctx.telegram.sendMessage(targetUserId, response);
         await ctx.reply(MESSAGES.ADMIN_RESPONSE(response, targetUserId));
@@ -441,25 +432,34 @@ class BotHandlers {
     try {
       const query = ctx.inlineQuery.query;
       const userId = ctx.from.id;
-      
       const user = this.gameService.userService.getUser(userId);
-      if (user && user.isInLobby() && query === user.lobbyId) {
-           return await ctx.answerInlineQuery([
+
+      if (query === 'invite' && user && user.isAvailable()) {
+        const result = this.gameService.createOnlineLobby(userId);
+        
+        if (result.success) {
+          return await ctx.answerInlineQuery([
             {
               type: 'article',
               id: ctx.inlineQuery.id,
-              title: 'Поділитися запрошенням у гру',
-              description: 'Натисніть, щоб надіслати запрошення другу.',
+              title: 'Create and invite to the lobby',
+              description: 'Invite a friend to play against each other.',
               input_message_content: {
                 message_text: MESSAGES.INVITE_TO_GAME
               },
-              reply_markup: KeyboardService.getAcceptInviteKeyboard(user.lobbyId)
+              reply_markup: KeyboardService.getAcceptInviteKeyboard(result.lobby.id)
             }
-          ], { cache_time: 0, is_personal: true });
+          ], {
+            cache_time: 0,
+            is_personal: true
+          });
+        }
       }
+
+      await ctx.answerInlineQuery();
     } catch (error) {
       logger.error('Error in handleInlineQuery:', error);
-      await ctx.answerInlineQuery([]);
+      await ctx.answerInlineQuery();
     }
   }
 
@@ -482,12 +482,13 @@ class BotHandlers {
    */
   async handleError(err, ctx) {
     const userId = ctx?.message?.chat?.id || ctx?.from?.id;
-    logger.error('Bot error:', { error: err.message, stack: err.stack, context: ctx.update });
-
+    
     if (userId) {
-      await ctx.reply(MESSAGES.ERROR_START).catch(e => logger.error("Failed to send error message to user", e));
+      await ctx.reply(MESSAGES.ERROR_START);
       this.gameService.userService.resetUser(userId);
     }
+    
+    logger.error('Bot error:', err);
   }
 
   /**
@@ -497,8 +498,8 @@ class BotHandlers {
     setInterval(() => {
       try {
         const cleaned = this.gameService.cleanupOldGames();
-        if (cleaned.totalCleaned > 0) {
-          logger.info(`Cleanup job completed: ${cleaned.totalCleaned} old lobbies removed`);
+        if (cleaned > 0) {
+          logger.info(`Cleanup job completed: ${cleaned} old lobbies removed`);
         }
       } catch (error) {
         logger.error('Error in cleanup job:', error);

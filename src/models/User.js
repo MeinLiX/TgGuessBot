@@ -7,7 +7,6 @@ class User {
     this.lobbyId = '';
     this.password = 0;
     this.state = USER_STATES.DEFAULT;
-    this.lastWebAppQueryId = null;
   }
 
   /**

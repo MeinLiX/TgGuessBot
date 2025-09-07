@@ -8,8 +8,6 @@ class Player {
     this.id = userId;
     this.secretNumber = '';
     this.currentGuess = '';
-    this.isMyTurn = false;
-    this.guessHistory = [];
   }
 
   setSecretNumber(number) {
@@ -27,10 +25,6 @@ class Player {
   hasSecretNumber() {
     return this.secretNumber !== '';
   }
-
-  setTurn(isMyTurn) {
-    this.isMyTurn = isMyTurn;
-  }
 }
 
 class Lobby {
@@ -46,11 +40,6 @@ class Lobby {
     this.players = [];
     this.maxPlayers = config.game.maxLobbySize;
     this.createdAt = new Date();
-    this.gameStarted = false;
-    this.currentPlayerIndex = 0;
-    this.gameEnded = false;
-    this.winnerId = null;
-    this.endGameMessage = '';
 
     if (this.settings.isComputer) {
       this.addComputerPlayer();
@@ -104,66 +93,6 @@ class Lobby {
   }
 
   /**
-   * Start the game and set initial turn order
-   */
-  startGame() {
-    if (!this.allPlayersReady() || this.gameStarted) {
-      return false;
-    }
-
-    this.gameStarted = true;
-    
-    if (!this.settings.isComputer) {
-      const humanPlayers = this.players.filter(p => p.id !== 0);
-      if (humanPlayers.length >= 2) {
-        humanPlayers[0].setTurn(true);
-        humanPlayers[1].setTurn(false);
-        this.currentPlayerIndex = this.players.findIndex(p => p.id === humanPlayers[0].id);
-      }
-    } else {
-      const humanPlayer = this.players.find(p => p.id !== 0);
-      if (humanPlayer) {
-        humanPlayer.setTurn(true);
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Switch turn to next player
-   */
-  switchTurn() {
-    const humanPlayers = this.players.filter(p => p.id !== 0);
-    if (humanPlayers.length < 2) return;
-
-    const currentPlayer = this.players[this.currentPlayerIndex];
-    if (currentPlayer) currentPlayer.setTurn(false);
-
-    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-    let nextPlayer = this.players[this.currentPlayerIndex];
-
-    while (nextPlayer.id === 0) {
-        this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-        nextPlayer = this.players[this.currentPlayerIndex];
-    }
-    
-    nextPlayer.setTurn(true);
-  }
-
-  /**
-   * Check if it's player's turn
-   */
-  isPlayerTurn(userId) {
-    if (this.settings.isComputer) {
-      return true;
-    }
-
-    const player = this.getPlayer(userId);
-    return player ? player.isMyTurn : false;
-  }
-
-  /**
    * Get player by ID
    */
   getPlayer(userId) {
@@ -198,10 +127,6 @@ class Lobby {
 
     player.setSecretNumber(secretNumber);
     
-    if (this.allPlayersReady() && this.isFull() && !this.gameStarted) {
-      this.startGame();
-    }
-    
     return {
       success: true,
       message: `If you would like to change your number, please send it to me again\nYour secret number: ${secretNumber}\n\nWait enemy...`,
@@ -220,22 +145,6 @@ class Lobby {
       };
     }
 
-    if (!this.gameStarted) {
-      return {
-        success: false,
-        message: "Game not started yet!",
-        opponent: "",
-      };
-    }
-    
-    if (this.gameEnded) {
-      return {
-        success: false,
-        message: "Game has already ended.",
-        opponent: "",
-      }
-    }
-
     if (this.settings.isComputer) {
       return this.processPracticeGuess(userId, guess);
     } else {
@@ -250,26 +159,14 @@ class Lobby {
     const player = this.getPlayer(userId);
     const computerPlayer = this.players[0];
     
-    if (!player || !computerPlayer) {
-      return {
-        success: false,
-        message: "Game error!",
-        opponent: "",
-      };
-    }
-    
     player.setCurrentGuess(guess);
     const audit = GameUtils.auditNumber(guess, computerPlayer.secretNumber);
-    player.guessHistory.push({ guess, ...audit });
     const resultMessage = GameUtils.formatGameResult(guess, audit);
 
     if (GameUtils.isWinningGuess(audit)) {
-      this.gameEnded = true;
-      this.winnerId = userId;
-      this.endGameMessage = "Very good, you won!";
       return {
         success: true,
-        message: resultMessage + this.endGameMessage,
+        message: resultMessage + "Very good, you won!",
         opponent: "",
         gameEnded: true,
       };
@@ -295,71 +192,38 @@ class Lobby {
       };
     }
 
-    if (!this.isPlayerTurn(userId)) {
-      return {
-        success: false,
-        message: "Wait, it's not your turn!",
-        opponent: "",
-      };
-    }
-
     const player = this.getPlayer(userId);
     const opponent = this.getOpponent(userId);
 
-    if (!player || !opponent) {
+    if (player.currentGuess !== '') {
       return {
         success: false,
-        message: "Game error!",
+        message: "Wait, enemy move!",
         opponent: "",
       };
     }
 
     player.setCurrentGuess(guess);
     const audit = GameUtils.auditNumber(guess, opponent.secretNumber);
-    player.guessHistory.push({ guess, ...audit });
     const resultMessage = GameUtils.formatGameResult(guess, audit);
 
+    opponent.clearCurrentGuess();
+
     if (GameUtils.isWinningGuess(audit)) {
-      this.gameEnded = true;
-      this.winnerId = userId;
-      this.endGameMessage = "Very good, you won!";
       return {
         success: true,
-        message: resultMessage + this.endGameMessage,
+        message: resultMessage + "Very good, you won!",
         opponent: "Your opponent guessed the number!",
         gameEnded: true,
       };
     } else {
-      this.switchTurn();
-      
       return {
         success: true,
-        message: resultMessage + "Try again!",
+        message: resultMessage + "Try again!\nIf your opponent doesn't guess your number c:",
         opponent: "The time has come!\nGuess the number.",
         gameEnded: false,
       };
     }
-  }
-
-  /**
-   * Get current player turn info
-   */
-  getCurrentTurnInfo() {
-    if (this.settings.isComputer) {
-      const humanPlayer = this.players.find(p => p.id !== 0);
-      return {
-        currentPlayerId: humanPlayer ? humanPlayer.id : null,
-        isGameStarted: this.gameStarted
-      };
-    }
-
-    const currentPlayer = this.players.find(p => p.isMyTurn);
-    
-    return {
-      currentPlayerId: currentPlayer ? currentPlayer.id : null,
-      isGameStarted: this.gameStarted,
-      currentPlayerIndex: this.currentPlayerIndex
-    };
   }
 
   /**
@@ -373,8 +237,6 @@ class Lobby {
       gameMode: this.gameMode,
       settings: this.settings,
       createdAt: this.createdAt,
-      gameStarted: this.gameStarted,
-      currentTurn: this.getCurrentTurnInfo()
     };
   }
 }
